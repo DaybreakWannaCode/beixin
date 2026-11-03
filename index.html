@@ -9468,7 +9468,8 @@ async function snapEnding() {
         // html2canvas 读不懂“left 3px top 3px”这种四段的背景位置，角花改成贴着边框的写法
         const fix = doc.createElement('style');
         fix.textContent = '.card,.fate{background-position:0 0,100% 0,0 100%,100% 100%!important;background-origin:border-box!important}'
-          + '.credits::before{background-size:80px 40px!important}.sec h3::before{background-size:12px 14px!important}';
+          + '.credits::before{background-size:80px 40px!important}.sec h3::before{background-size:12px 14px!important}'
+          + '*{animation:none!important;transition:none!important}';  // 特效的进场动画在拷贝里会从头放，那一刻是透明的
         doc.head.appendChild(fix);
         Object.assign(c.style, {width:W + 'px', maxWidth:'none', padding:`${pad}px`, boxSizing:'content-box', margin:'0', background:'#100e0b'});
         // 已故的人：画布不认 CSS 滤镜，改成淡一点
@@ -9535,6 +9536,542 @@ modalClick = function (e) {
   st.textContent = `
 .snap-img{max-height:62vh; overflow:auto; border:1px solid var(--line2); border-radius:var(--r); background:var(--soot)}
 .snap-img img{display:block; width:100%; height:auto}`;
+  const last = [...document.querySelectorAll('style')].pop();
+  if (last) last.after(st); else document.head.appendChild(st);
+})();
+// ===== 特效：天光、飘着的东西、场景的气氛、骰子、决斗、赶路 =====
+// 只改看的，不碰游戏的数。用自己的随机数，不动 Math.random（机器人和截图要靠固定的随机数）。
+// 系统里开了“减少动态效果”，这里就什么都不做。
+const FX = (() => {
+  const mq = matchMedia('(prefers-reduced-motion: reduce)');
+  const off = () => mq.matches;
+  let seed = (Date.now() % 2147483646) + 1;
+  const rnd = () => (seed = seed * 48271 % 2147483647) / 2147483647;
+  const rr = (a, b) => a + (b - a) * rnd();
+  const TAU = Math.PI * 2;
+
+  // 一张柔光的小图，画粒子时拿来贴
+  const SPR = {};
+  function spr(col) {
+    if (SPR[col]) return SPR[col];
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, `rgba(${col},1)`); gr.addColorStop(.22, `rgba(${col},.6)`); gr.addColorStop(1, `rgba(${col},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return SPR[col] = c;
+  }
+  // 极光的一条光帘：底下亮，往上淡
+  function streak(col) {
+    const c = document.createElement('canvas'); c.width = 4; c.height = 128;
+    const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 128);
+    gr.addColorStop(0, `rgba(${col},0)`); gr.addColorStop(.75, `rgba(${col},.85)`); gr.addColorStop(.9, `rgba(${col},1)`); gr.addColorStop(1, `rgba(${col},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 128); return c;
+  }
+  const blot = (g, col, x, y, r, a) => { if (a <= .003) return; g.globalAlpha = Math.min(1, a); g.drawImage(spr(col), x - r, y - r, r * 2, r * 2); };
+  const wrap = (p, W, H, m) => { if (p.x < -m) p.x += W + 2 * m; else if (p.x > W + m) p.x -= W + 2 * m; if (p.y < -m) p.y += H + 2 * m; else if (p.y > H + m) p.y -= H + 2 * m; return true; };
+  const flick = t => .82 + .1 * Math.sin(t * 7.3) + .08 * Math.sin(t * 12.7 + 1.3);
+
+  // ----- 粒子：init 放到起点，step 走一步（返回 false 就重生），draw 画出来；add 表示叠加发光 -----
+  const T = {
+    mote: {col:'243,213,138', add:true,
+      init: p => { p.r = rr(.7, 1.8); p.vx = rr(-5, 5); p.vy = rr(-7, 2); p.ph = rnd() * 7; p.f = rr(.4, 1.2); },
+      step: (p, dt, t, W, H) => { p.x += p.vx * dt; p.y += p.vy * dt; return wrap(p, W, H, 12); },
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r * 4, (.12 + .5 * Math.sin(t * p.f + p.ph) ** 2) * c.a)},
+    pollen: {col:'246,240,222',
+      init: (p, W, H, first) => { if (!first) p.x = -8; p.r = rr(1.6, 3); p.vx = rr(8, 20); p.vy = rr(-3, 4); p.ph = rnd() * 7; },
+      step: (p, dt, t, W, H) => { p.x += p.vx * dt; p.y += (p.vy + Math.sin(t * .9 + p.ph) * 7) * dt; return p.x < W + 10 && wrap(p, W, H, 10); },
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r * 2.4, .5 * c.a)},
+    firefly: {col:'214,240,120', add:true,
+      init: p => { p.ang = rnd() * TAU; p.sp = rr(6, 16); p.ph = rnd() * 10; p.per = rr(2.4, 4.6); },
+      step: (p, dt, t, W, H) => { p.ang += Math.sin(t * .7 + p.ph) * dt * 1.6; p.x += Math.cos(p.ang) * p.sp * dt; p.y += Math.sin(p.ang) * p.sp * dt * .6; return wrap(p, W, H, 14); },
+      draw: (g, p, t, c) => { const k = ((t + p.ph) % p.per) / p.per, a = (k < .45 ? Math.sin(k / .45 * Math.PI) : 0) * c.a; blot(g, c.col, p.x, p.y, 15, a * .75); blot(g, '250,255,210', p.x, p.y, 3, a); }},
+    ember: {col:'255,150,60', add:true,
+      init: (p, W, H, first) => { if (!first) p.y = H + rr(0, 24); p.vy = -rr(24, 62); p.vx = rr(-8, 8); p.life = first ? rr(0, 3) : 0; p.max = rr(2.6, 5.6); p.r = rr(.8, 2.1); p.ph = rnd() * 7; },
+      step: (p, dt, t) => { p.life += dt; p.x += (p.vx + Math.sin(t * 2 + p.ph) * 11) * dt; p.y += p.vy * dt; return p.life < p.max && p.y > -20; },
+      draw: (g, p, t, c) => { const k = p.life / p.max, a = (k < .12 ? k / .12 : 1 - (k - .12) / .88) * (.65 + .35 * Math.sin(t * 13 + p.ph)) * c.a; blot(g, c.col, p.x, p.y, p.r * 4.2, a); blot(g, '255,236,190', p.x, p.y, p.r * 1.1, a); }},
+    smoke: {col:'128,120,112',
+      init: (p, W, H, first) => { if (!first) p.y = H + rr(20, 90); p.r = rr(50, 110); p.vy = -rr(5, 13); p.vx = rr(2, 8); p.life = first ? rr(0, 9) : 0; p.max = rr(10, 17); },
+      step: (p, dt) => { p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 3; return p.life < p.max; },
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r, Math.sin(p.life / p.max * Math.PI) * .09 * c.a)},
+    mist: {col:'200,210,222',
+      init: (p, W, H, first) => { if (!first) p.x = -320; p.y = H * rr(.3, 1); p.rx = rr(140, 290); p.vx = rr(4, 11); p.al = rr(.05, .1); },
+      step: (p, dt, t, W) => { p.x += p.vx * dt; return p.x < W + 320; },
+      draw: (g, p, t, c) => { g.save(); g.translate(p.x, p.y); g.scale(1, .3); blot(g, c.col, 0, 0, p.rx, p.al * c.a); g.restore(); }},
+    dust: {col:'200,188,164', add:true,
+      init: (p, W, H, first) => { if (!first) p.y = -6; p.r = rr(.5, 1.3); p.vy = rr(6, 18); p.vx = rr(-3, 3); p.ph = rnd() * 7; },
+      step: (p, dt, t, W, H) => { p.y += p.vy * dt; p.x += (p.vx + Math.sin(t + p.ph) * 3) * dt; return p.y < H + 6; },
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r * 2.6, .4 * c.a)},
+    petal: {col:'242,214,208',
+      init: (p, W, H, first) => { if (!first) p.y = -10; p.s = rr(2.6, 4.6); p.vy = rr(10, 20); p.vx = rr(4, 13); p.rot = rnd() * 6; p.vr = rr(-1.6, 1.6); p.ph = rnd() * 7; },
+      step: (p, dt, t, W, H) => { p.y += p.vy * dt; p.x += (p.vx + Math.sin(t * 1.3 + p.ph) * 12) * dt; p.rot += p.vr * dt; return p.y < H + 10 && wrap(p, W, H + 40, 10); },
+      draw: (g, p, t, c) => { g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(1, .45 + .55 * Math.abs(Math.sin(t * 1.8 + p.ph))); g.globalAlpha = .6 * c.a; g.fillStyle = `rgb(${c.col})`; g.beginPath(); g.ellipse(0, 0, p.s, p.s * .62, 0, 0, TAU); g.fill(); g.restore(); }},
+    ash: {col:'168,160,150',
+      init: (p, W, H, first) => { if (!first) p.y = -6; p.r = rr(.9, 2.4); p.vy = rr(7, 17); p.vx = rr(-4, 6); p.ph = rnd() * 7; },
+      step: (p, dt, t, W, H) => { p.y += p.vy * dt; p.x += (p.vx + Math.sin(t * .8 + p.ph) * 9) * dt; return p.y < H + 6; },
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r * 2.2, .45 * c.a)},
+    rain: {col:'170,190,225',
+      init: (p, W, H, first) => { p.x = rnd() * (W + 240) - 200; p.y = first ? rnd() * H : -rr(0, H * .4); p.len = rr(12, 24); p.v = rr(650, 920); },
+      step: (p, dt, t, W, H) => { p.y += p.v * dt; p.x += p.v * .2 * dt; return p.y < H + 30; },
+      batch: (g, ps, t, c) => { g.globalAlpha = .32 * c.a; g.strokeStyle = `rgb(${c.col})`; g.lineWidth = 1; g.beginPath(); for (const p of ps) { g.moveTo(p.x, p.y); g.lineTo(p.x - p.len * .2, p.y - p.len); } g.stroke(); }},
+    sparkle: {col:'255,243,208', add:true,
+      init: (p, W, H, first) => { p.x = rnd() * W; p.y = H * rr(.55, 1); p.life = first ? rr(0, 3) : 0; p.max = rr(1.4, 3.4); p.s = rr(2, 4.2); },
+      step: (p, dt) => { p.life += dt; return p.life < p.max; },
+      draw: (g, p, t, c) => { const k = p.life / p.max, a = (k < .12 ? k / .12 : k < .3 ? 1 - (k - .12) / .18 : 0) * c.a; if (a <= 0) return; blot(g, c.col, p.x, p.y, p.s * 3, a * .6); g.globalAlpha = a; g.strokeStyle = `rgb(${c.col})`; g.lineWidth = .8; g.beginPath(); g.moveTo(p.x - p.s, p.y); g.lineTo(p.x + p.s, p.y); g.moveTo(p.x, p.y - p.s); g.lineTo(p.x, p.y + p.s); g.stroke(); }},
+    star: {col:'235,240,255', add:true,
+      init: (p, W, H) => { p.y = rnd() * H * .6; p.r = rr(.4, 1.1); p.ph = rnd() * 7; p.f = rr(.6, 2); },
+      step: () => true,
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r * 3, (.25 + .6 * Math.sin(t * p.f + p.ph) ** 2) * c.a)},
+    bokeh: {col:'255,190,120', add:true,
+      init: p => { p.r = rr(14, 34); p.vx = rr(-4, 4); p.vy = rr(-5, -1); p.ph = rnd() * 7; p.f = rr(.3, .8); },
+      step: (p, dt, t, W, H) => { p.x += p.vx * dt; p.y += p.vy * dt; return wrap(p, W, H, 40); },
+      draw: (g, p, t, c) => blot(g, c.col, p.x, p.y, p.r, (.05 + .08 * Math.sin(t * p.f + p.ph) ** 2) * c.a)},
+  };
+
+  // ----- 光：每一帧先铺一层 -----
+  function rad(g, x, y, r, col, a) { if (a <= 0) return; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.globalAlpha = 1; g.fillRect(0, 0, g.canvas.width, g.canvas.height); }
+  function lin(g, H, col, a, to) { const gr = g.createLinearGradient(0, 0, 0, H * to); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.globalAlpha = 1; g.fillRect(0, 0, g.canvas.width, H * to); }
+  const LIGHT = {
+    dawn: (g, W, H) => { lin(g, H, '150,180,230', .14, .6); rad(g, W * .86, -H * .05, Math.max(W, H) * .6, '255,196,140', .11); },
+    day: (g, W, H) => rad(g, W * .5, -H * .1, Math.max(W, H) * .75, '255,235,190', .08),
+    night: (g, W, H, t) => { lin(g, H, '40,60,110', .16, .5); rad(g, W * .08, H * 1.02, Math.max(W, H) * .55, '255,170,80', .08 * flick(t)); },
+    candle: (g, W, H, t) => rad(g, W * .1, H * .98, Math.max(W, H) * .7, '255,165,75', .14 * flick(t)),
+    fire: (g, W, H, t) => rad(g, W * .5, H * 1.08, Math.max(W, H) * .75, '255,105,40', .2 * flick(t)),
+    noon: (g, W, H, t) => { g.globalAlpha = 1; g.fillStyle = `rgba(255,242,205,${.05 + .025 * Math.sin(t * 1.7)})`; g.fillRect(0, 0, W, H); rad(g, W * .5, -H * .2, Math.max(W, H) * .8, '255,250,225', .16); },
+    storm: (g, W, H) => lin(g, H, '110,140,190', .12, .7),
+    battle: (g, W, H, t) => { rad(g, W * .5, H * 1.1, Math.max(W, H) * .8, '170,60,30', .16 * flick(t)); lin(g, H, '90,70,55', .1, .5); },
+    moon: (g, W, H) => rad(g, W * .82, -H * .08, Math.max(W, H) * .7, '170,200,255', .15),
+    cold: (g, W, H) => { g.globalAlpha = 1; g.fillStyle = 'rgba(150,170,195,.05)'; g.fillRect(0, 0, W, H); },
+    dark: (g, W, H) => { const gr = g.createRadialGradient(W / 2, H * .4, Math.min(W, H) * .2, W / 2, H * .4, Math.max(W, H) * .8); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.35)'); g.globalAlpha = 1; g.fillStyle = gr; g.fillRect(0, 0, W, H); },
+  };
+  // ----- 整层的东西：光柱、极光、闪电 -----
+  function rays(g, W, H, t, col) {
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 4; i++) {
+      const x0 = W * (.08 + .24 * i) + Math.sin(t * .15 + i * 1.9) * W * .03, w0 = W * .04, w1 = W * .15, dx = H * .38;
+      const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, `rgba(${col},${.085 * (.7 + .3 * Math.sin(t * .3 + i * 1.7))})`); gr.addColorStop(1, `rgba(${col},0)`);
+      g.fillStyle = gr; g.globalAlpha = 1; g.beginPath(); g.moveTo(x0, -10); g.lineTo(x0 + w0, -10); g.lineTo(x0 + w0 + dx + w1, H); g.lineTo(x0 + dx, H); g.closePath(); g.fill();
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
+  const LAYER = {
+    rays: (g, W, H, t) => rays(g, W, H, t, '255,232,180'),
+    mrays: (g, W, H, t) => rays(g, W, H, t, '185,208,255'),
+    aurora: (g, W, H, t, F) => {
+      const R = F.aur || (F.aur = [['95,224,160', 0, 1], ['215,95,150', 2.3, .55], ['120,200,255', 4.1, .35]].map(([col, o, a]) => ({o, a, img:streak(col)})));
+      g.globalCompositeOperation = 'lighter';
+      for (const r of R) for (let x = -8; x < W + 8; x += 5) {
+        const u = x / W, base = H * (.3 + .07 * Math.sin(u * TAU * 1.2 + t * .25 + r.o) + .035 * Math.sin(u * TAU * 3.3 - t * .45 + r.o));
+        const hgt = H * (.22 + .08 * Math.sin(u * 7 + t * .35 + r.o)), b = .5 + .5 * Math.sin(u * 23 + t * 1.3 + r.o) * Math.sin(u * 9 - t * .7);
+        g.globalAlpha = (.04 + .11 * b * b) * r.a; g.drawImage(r.img, x, base - hgt, 7, hgt);
+      }
+      g.globalCompositeOperation = 'source-over';
+    },
+    lightning: (g, W, H, t, F) => {
+      const L = F.L || (F.L = {next:t + rr(1.5, 4), at:-9});
+      if (t > L.next) { L.at = t; L.next = t + rr(4, 9); }
+      const d = t - L.at, a = d < .07 ? .32 : d < .14 ? .04 : d < .22 ? .24 : d < .6 ? .24 * (1 - (d - .22) / .38) : 0;
+      if (a > 0) { g.globalAlpha = 1; g.fillStyle = `rgba(215,228,255,${a})`; g.fillRect(0, 0, W, H); }
+    },
+  };
+
+  // ----- 画布：每一块挂在一个元素里，元素重画了，粒子接着飘 -----
+  const fields = {};
+  function mount(name, host, prof, opt = {}) {
+    if (!host || !prof || off()) { delete fields[name]; return null; }
+    const cv = document.createElement('canvas');
+    cv.className = 'fx-cv'; cv.setAttribute('aria-hidden', 'true'); cv.setAttribute('data-html2canvas-ignore', '');
+    host.insertBefore(cv, host.firstChild);
+    let F = fields[name];
+    if (!F || F.key !== prof.k) { F = fields[name] = {key:prof.k, prof, groups:null, W:0, H:0}; cv.classList.add('in'); }
+    F.cv = cv; F.g = cv.getContext('2d'); F.dpr = opt.dpr || 2; F.fps = opt.fps || 60; F.sized = null;
+    kick();
+    return F;
+  }
+  function build(F) {
+    const area = Math.max(.3, Math.min(1.3, F.W * F.H / (1280 * 720) * (F.prof.dense || 1)));
+    F.groups = (F.prof.parts || []).map(([ty, n, o = {}]) => {
+      const gp = {ty, col:o.col || T[ty].col, a:o.a || 1, ps:[]};
+      const k = Math.max(1, Math.round(n * (F.prof.fixed ? 1 : area)));
+      for (let i = 0; i < k; i++) { const p = {x:rnd() * F.W, y:rnd() * F.H}; T[ty].init(p, F.W, F.H, true); gp.ps.push(p); }
+      return gp;
+    });
+  }
+  function size(F) {
+    const w = F.cv.clientWidth, h = F.cv.clientHeight;
+    if (F.sized === F.cv && w === F.W && h === F.H) return;
+    const d = Math.min(window.devicePixelRatio || 1, F.dpr);
+    F.cv.width = Math.round(w * d); F.cv.height = Math.round(h * d); F.g.setTransform(d, 0, 0, d, 0, 0);
+    if (F.groups && F.W && F.H && w && h) { const sx = w / F.W, sy = h / F.H; for (const gp of F.groups) for (const p of gp.ps) { p.x *= sx; p.y *= sy; } }
+    F.W = w; F.H = h; F.sized = F.cv;
+  }
+  function frame(F, t, dt) {
+    const g = F.g, W = F.W, H = F.H, P = F.prof;
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.clearRect(0, 0, W, H);
+    if (P.light && LIGHT[P.light]) LIGHT[P.light](g, W, H, t);
+    for (const l of P.layers || []) LAYER[l](g, W, H, t, F);
+    for (const gp of F.groups) {
+      const ty = T[gp.ty];
+      for (const p of gp.ps) if (!ty.step(p, dt, t, W, H)) { p.x = rnd() * W; p.y = rnd() * H; ty.init(p, W, H, false); }
+      g.globalCompositeOperation = ty.add ? 'lighter' : 'source-over';
+      if (ty.batch) ty.batch(g, gp.ps, t, gp); else for (const p of gp.ps) ty.draw(g, p, t, gp);
+    }
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+  }
+  let raf = 0, last = 0;
+  function kick() { if (!raf) raf = requestAnimationFrame(loop); }
+  function loop(now) {
+    raf = 0;
+    const t = now / 1000, dt = Math.min(.05, last ? t - last : .016); last = t;
+    let live = false;
+    for (const [name, F] of Object.entries(fields)) {
+      if (!F.cv || !F.cv.isConnected) { delete fields[name]; continue; }
+      live = true;
+      if (F.fps < 60 && F.lastT && t - F.lastT < 1 / F.fps) continue;
+      const fdt = F.lastT ? Math.min(.06, t - F.lastT) : dt; F.lastT = t;
+      size(F); if (!F.W || !F.H) continue;
+      if (!F.groups) build(F);
+      frame(F, t, fdt);
+    }
+    if (live) raf = requestAnimationFrame(loop); else last = 0;
+  }
+  return {off, rnd, rr, mount, fields};
+})();
+
+// ===== 地点卡片上的天光：看时辰、季节和地方 =====
+const FX_INDOOR = new Set('manor church tavern smith tent hall gallery mint mtavern brewery carolinum pavilion cmdry infirm sinn dominic bjail bbrew sedlec'.split(' '));
+const FX_HOLY = new Set(['church', 'dominic', 'cmdry']);
+const FX_CAMP = new Set(['wagons', 'tents', 'hungarians', 'hill', 'tubs']);
+const FX_WATER = new Set(['river', 'ferry', 'ponds', 'dike', 'pbridge', 'bridge']);
+function fxAmbient() {
+  const at = S.at, ph = S.ph, summer = S.day >= 60, water = FX_WATER.has(at);
+  const P = (k, light, parts, layers) => ({k:k + ':' + at + ':' + ph, light, parts, layers, dense:2.2});
+  if (at === 'utown' && S.f.ustiBurned) return P('burnt', 'fire', [['smoke', 5], ['ember', 10], ['ash', 10]]);
+  if (at === 'shaft') return P('shaft', 'dark', [['dust', 22]]);
+  if (at === 'sedlec') return P('bones', 'cold', [['dust', 10], ['mote', 4, {col:'190,205,230'}]]);
+  if (FX_CAMP.has(at)) return ph === 2 ? P('campN', 'fire', [['ember', 16], ['smoke', 3]]) : P('campD', ph ? 'day' : 'dawn', [['smoke', 4], ['mote', 6]]);
+  if (FX_HOLY.has(at)) return ph === 2 ? P('holyN', 'candle', [['mote', 8]]) : P('holyD', 'day', [['mote', 14]], ['rays']);
+  if (FX_INDOOR.has(at)) return ph === 2 ? P('inN', 'candle', [['mote', 6]]) : P('inD', 'day', [['mote', 10]], ['rays']);
+  const extra = water && ph === 1 ? [['sparkle', 7]] : at === 'grave' ? [['petal', 6]] : [];
+  if (ph === 0) return P('dawn', 'dawn', [['mist', water ? 8 : 5], ['mote', 6], ...extra]);
+  if (ph === 1) return P(summer ? 'dayS' : 'dayP', 'day', [summer ? ['mote', 12] : ['pollen', 10], ...extra], at === 'glade' ? ['rays'] : []);
+  return P(summer ? 'nightS' : 'nightP', 'night', [summer ? ['firefly', at === 'glade' ? 16 : 9] : ['mote', 5, {col:'190,205,235'}], ...extra]);
+}
+
+// ===== 场景的气氛：认得的场景直接给，别的看字 =====
+const FX_MOOD_ID = {s_sky:'aurora', s_noon:'noon', s_lady:'moon', s_lady_tower:'moon', s_lady_death:'moon', s_sudomer:'battle', s_vitkov:'battle', s_vit2:'battle', s_vit_end:'battle',
+  s_shaft:'mine', w_storm:'storm', w_burn:'fire', w_pyre:'fire', s_mill_fire:'fire', w_bells:'church', pax:'church', w_gun:'battle', w_march2:'battle', s_campfire:'fire', pt_talk:'fire'};
+const FX_MOOD_RX = [[/暴雨|雷声|闪电|大雨|下起雨|雨点|雨水|淋湿/, 'storm'], [/着火|大火|火光|火堆|篝火|火刑|烧起来|火焰|火把/, 'fire'], [/月光|月亮/, 'moon'],
+  [/坟|墓|尸体|骨头|下葬|棺材/, 'grave'], [/教堂|弥撒|祭坛|圣坛|唱诗|祷文/, 'church'], [/矿井|井口|矿工|井下/, 'mine'], [/河水|河边|渡口|渡船|鱼塘|河面|水面/, 'water']];
+const FX_MOODS = {
+  aurora:{light:'night', layers:['aurora'], parts:[['star', 50]]},
+  storm:{light:'storm', layers:['lightning'], parts:[['rain', 130]]},
+  fire:{light:'fire', parts:[['ember', 40], ['smoke', 7]]},
+  noon:{light:'noon', parts:[['mote', 34, {col:'255,246,214'}]]},
+  battle:{light:'battle', parts:[['smoke', 9], ['ember', 12], ['dust', 14]]},
+  church:{light:'day', layers:['rays'], parts:[['mote', 30]]},
+  moon:{light:'moon', layers:['mrays'], parts:[['mist', 7], ['mote', 10, {col:'200,215,245'}]]},
+  grave:{light:'cold', parts:[['ash', 30]]},
+  love:{light:'candle', parts:[['bokeh', 18], ['mote', 16]]},
+  mine:{light:'dark', parts:[['dust', 40]]},
+  water:{light:'day', parts:[['mist', 6], ['sparkle', 14]]},
+  night:{light:'night', parts:[['mote', 10, {col:'200,210,240'}]]},
+  duel:{light:'battle', parts:[['dust', 12], ['ember', 6]]},
+};
+const fxMoodCache = {};
+function fxMoodOf(id) {
+  const m = FX_MOOD_ID[id] || (/^c_\w+_(kiss|night|flirt)$|^c_lovenight$|^dt_|bath|verbena|clandestine|^c_vows$/.test(id) ? 'love' : null);
+  if (m) return m;
+  // 同一个场景（比如差事）每次的字可能不一样，按场景加标题记
+  const sc = $('#modal-root .scene'), h = sc && sc.querySelector('h2'), key = id + '|' + (h ? h.textContent : '');
+  if (key in fxMoodCache) return fxMoodCache[key];
+  const txt = sc ? (h ? h.textContent : '') + [...sc.querySelectorAll('.prose p')].slice(0, 3).map(p => p.textContent).join('') : '';
+  let found = null;
+  for (const [rx, k] of FX_MOOD_RX) if (rx.test(txt)) { found = k; break; }
+  // 结果页上没有原文，只在头一次（看得到原文的时候）判断
+  if (sc && sc.querySelector('.prose p') && !(cur && cur.res)) fxMoodCache[key] = found;
+  return found;
+}
+function fxMood(m) {
+  const ov = $('#modal-root .overlay');
+  if (!ov || !m || !FX_MOODS[m]) return;
+  ov.classList.add('mood-' + m);
+  FX.mount('mood', ov, Object.assign({k:m}, FX_MOODS[m]), {dpr:1.5});
+}
+
+// ===== 窗口：新开的才有进场；同一个场景重画不再进场 =====
+let fxLastModal = null, fxLastRes = null;
+const _modalFx = modal;
+modal = function (html, kind) {
+  _modalFx(html, kind);
+  if (FX.off()) return;
+  const ov = $('#modal-root .overlay'); if (!ov) return;
+  const h = ov.querySelector('h2'), key = (kind || 'modal') + '|' + (kind === 'scene' && cur ? cur.id : kind === 'duel' ? 'duel' : h ? h.textContent : '');
+  if (key !== fxLastModal) {
+    ov.classList.add('fx-enter');
+    ov.querySelectorAll('.scene > .prose > p').forEach((p, i) => { p.style.animationDelay = (.08 + i * .07) + 's'; });
+    ov.querySelectorAll('.choices > .ch, .moves-d > .ch').forEach((c, i) => { c.style.animationDelay = (.2 + i * .05) + 's'; });
+  }
+  fxLastModal = key;
+};
+const _closeModalFx = closeModal;
+closeModal = function () { _closeModalFx(); fxLastModal = null; };
+
+// ===== 掷骰子、出结果 =====
+function fxReveal() {
+  const res = $('#modal-root .res'); if (!res) return;
+  const dice = [...res.querySelectorAll('.dice .die')];
+  res.classList.add('fx-reveal');
+  if (dice.length) {
+    res.classList.add('has-roll');
+    const fin = dice.map(d => d.textContent), t0 = performance.now();
+    const spin = () => {
+      if (!res.isConnected) return;
+      if (performance.now() - t0 > 560) { dice.forEach((d, i) => { d.textContent = fin[i]; }); return; }
+      dice.forEach(d => { d.textContent = 1 + Math.floor(FX.rnd() * 6); });
+      setTimeout(spin, 70);
+    };
+    spin();
+  }
+  const base = dice.length ? .95 : .25;
+  res.querySelectorAll('.fx .chip').forEach((c, i) => { c.style.animationDelay = (base + i * .09) + 's'; });
+}
+const _renderSceneFx = renderScene;
+renderScene = function () {
+  _renderSceneFx();
+  if (FX.off() || !cur) return;
+  fxMood(fxMoodOf(cur.id));
+  if (cur.res && cur.res !== fxLastRes) fxReveal();
+  fxLastRes = cur.res;
+};
+
+// ===== 决斗：挨打、打中、刀碰刀 =====
+const _renderDuelFx = renderDuel;
+renderDuel = function () { _renderDuelFx(); if (!FX.off()) fxMood('duel'); };
+const _duelMoveFx = duelMove;
+duelMove = function (m) {
+  const pre = DUEL && !DUEL.done ? {hp:DUEL.hp, my:DUEL.my} : null;
+  const r = _duelMoveFx(m);
+  if (!pre || !DUEL || FX.off()) return r;
+  const ov = $('#modal-root .overlay'); if (!ov) return r;
+  const sides = ov.querySelectorAll('.duel-side'), me = pre.my - DUEL.my, him = pre.hp - DUEL.hp;
+  const brk = (side, n) => { const i = sides[side] && sides[side].querySelectorAll('.pips i')[n]; if (i) i.classList.add('fx-brk'); };
+  if (me > 0) { ov.classList.add('fx-hitme'); brk(0, DUEL.my); }
+  if (him > 0) { ov.classList.add('fx-hithim'); brk(1, DUEL.hp); }
+  if (!me && !him && m !== 'pray' && m !== 'yield') ov.classList.add('fx-clash');
+  if (DUEL.done) ov.classList.add(DUEL.done === 'win' ? 'fx-won' : 'fx-lost');
+  return r;
+};
+
+// ===== 赶路：在地图上走过去，再到 =====
+let fxTrip = false;
+const _travelToFx = travelTo;
+travelTo = function (to) {
+  const svg = $('#modal-root svg.map'), A = S && REGION[S.region], B = REGION[to];
+  if (FX.off() || fxTrip || ui.modal !== 'map' || !svg || !A || !B || !roadsFrom(S.region).some(r => r.to === to)) return _travelToFx(to);
+  fxTrip = true;
+  const ov = $('#modal-root .overlay'); if (ov) ov.style.pointerEvents = 'none';
+  const NS = 'http://www.w3.org/2000/svg', mk = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const line = mk('line', {x1:A.x, y1:A.y, x2:A.x, y2:A.y, class:'fx-trip'});
+  const rider = mk('g', {class:'fx-rider'}); rider.appendChild(mk('circle', {r:13, class:'halo'})); rider.appendChild(mk('circle', {r:5.5}));
+  svg.appendChild(line); svg.appendChild(rider);
+  const dest = svg.querySelector(`[data-travel="${to}"]`); if (dest) dest.classList.add('fx-dest');
+  const t0 = performance.now(), D = 1000, ease = p => p < .5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
+  const step = now => {
+    const p = ease(Math.min(1, (now - t0) / D)), x = A.x + (B.x - A.x) * p, y = A.y + (B.y - A.y) * p;
+    line.setAttribute('x2', x); line.setAttribute('y2', y); rider.setAttribute('transform', `translate(${x} ${y})`);
+    if (p < 1) requestAnimationFrame(step); else setTimeout(() => { fxTrip = false; _travelToFx(to); }, 160);
+  };
+  requestAnimationFrame(step);
+};
+
+// ===== 主界面：到了新地方、换了地方、过了一天、换了时辰 =====
+let fxLast = {};
+const _renderGameFx = renderGame;
+renderGame = function () {
+  _renderGameFx();
+  if (!S) return;
+  const place = $('#app .place');
+  if (!FX.off() && place) {
+    if (fxLast.region && fxLast.region !== S.region) place.classList.add('fx-arrive');
+    else if (fxLast.at && fxLast.at !== S.at) place.classList.add('fx-moved');
+    if (fxLast.day != null && fxLast.day !== S.day) fxDawn();
+    else if (fxLast.ph != null && fxLast.ph !== S.ph) place.classList.add('fx-phase');
+    if (S.echo && fxLast.echo !== S.echo && fxLast.region === S.region) { const e = place.querySelector('.echo'); if (e) e.classList.add('fx-echo'); }
+    FX.mount('amb', place, fxAmbient(), {fps:30});
+  }
+  fxLast = {region:S.region, at:S.at, day:S.day, ph:S.ph, echo:S.echo};
+};
+function fxDawn() {
+  let w = document.getElementById('fx-wash');
+  if (!w) { w = document.createElement('div'); w.id = 'fx-wash'; w.setAttribute('aria-hidden', 'true'); w.setAttribute('data-html2canvas-ignore', ''); document.body.appendChild(w); }
+  w.classList.remove('go'); void w.offsetWidth; w.classList.add('go');
+  const tb = $('#app .topbar'); if (tb) tb.classList.add('fx-newday');
+}
+
+// ===== 标题、序幕、结局 =====
+const _renderTitleFx = renderTitle;
+renderTitle = function () {
+  _renderTitleFx();
+  fxLast = {}; fxLastModal = null;
+  const w = $('#app .title-wrap'); if (!w || FX.off()) return;
+  w.classList.add('fx-title');
+  FX.mount('page', w, {k:'title', light:'candle', parts:[['ember', 26], ['mote', 18], ['smoke', 3]]}, {dpr:1.5});
+};
+const FX_PROTO = {fire:{light:'fire', parts:[['ember', 34], ['smoke', 5]]}, window:{light:'day', layers:['rays'], parts:[['dust', 24]]}, mountain:{light:'dawn', parts:[['mist', 8], ['mote', 12]]},
+  crusade:{light:'battle', parts:[['smoke', 7], ['ash', 22]]}, willow:{light:'dawn', parts:[['pollen', 18], ['mote', 10]]}};
+const _renderPrologueFx = renderPrologue;
+renderPrologue = function (i, next) {
+  _renderPrologueFx(i, next);
+  const w = $('#app .proto'); if (!w || FX.off()) return;
+  w.classList.add('fx-page');
+  const art = PROLOGUE[protoIdx] && PROLOGUE[protoIdx].art;
+  if (FX_PROTO[art]) FX.mount('page', w, Object.assign({k:'proto-' + art}, FX_PROTO[art]), {dpr:1.5});
+};
+const _renderEndingFx = renderEnding;
+renderEnding = function () {
+  _renderEndingFx();
+  const e = $('#app .end'); if (!e || FX.off()) return;
+  e.classList.add('fx-end');
+  [...e.children].forEach((c, i) => { c.style.animationDelay = Math.min(i * .12, 2) + 's'; });
+  FX.mount('page', e, {k:'end', light:'candle', parts:[['mote', 22], ['bokeh', 6]]}, {dpr:1.5});
+};
+// 打开读档以后、继续游戏的时候，先把上次的状态清掉，免得一进来就当成“到了新地方”
+const _resumeFx = typeof resume === 'function' ? resume : null;
+if (_resumeFx) resume = function () { fxLast = {}; return _resumeFx.apply(this, arguments); };
+
+// ===== 小提示 =====
+const _toastFx = toast;
+toast = function (msg) {
+  _toastFx(msg);
+  const t = $('#toast'); if (!t || FX.off()) return;
+  t.classList.remove('fx-pop'); void t.offsetWidth; t.classList.add('fx-pop');
+};
+
+(() => {
+  const st = document.createElement('style');
+  st.textContent = `
+.fx-cv{position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none; z-index:-1}
+.fx-cv.in{animation:fxFade 1.4s ease-out both}
+.card.place > .fx-cv{z-index:0; border-radius:inherit; -webkit-mask-image:linear-gradient(#000, #000 42%, transparent 94%); mask-image:linear-gradient(#000, #000 42%, transparent 94%)}
+.card.place > :not(.fx-cv):not(.emblem){position:relative; z-index:1}
+.card.place > .emblem{z-index:1}
+.overlay > .fx-cv, .title-wrap > .fx-cv, .proto > .fx-cv, .end > .fx-cv{position:fixed}
+@keyframes fxFade{from{opacity:0} to{opacity:1}}
+@keyframes fxRise{from{opacity:0; transform:translateY(14px) scale(.985)} to{opacity:1; transform:none}}
+@keyframes fxUp{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+@keyframes fxPop{0%{opacity:0; transform:scale(.6)} 70%{opacity:1; transform:scale(1.08)} 100%{transform:none}}
+
+/* 窗口进场 */
+.overlay.fx-enter{animation:fxFade .24s ease-out both}
+.overlay.fx-enter > .scene{animation:fxRise .34s cubic-bezier(.2,.8,.3,1) both}
+.overlay.fx-enter > .scene > .prose > p{animation:fxUp .5s ease-out both}
+.overlay.fx-enter .choices > .ch, .overlay.fx-enter .moves-d > .ch{animation:fxUp .4s ease-out both}
+/* 各种气氛下，遮罩的颜色也跟着变一点 */
+.overlay.mood-fire{background:radial-gradient(120% 70% at 50% 110%, rgba(70,24,8,.86), rgba(6,5,5,.86) 70%)}
+.overlay.mood-battle, .overlay.mood-duel{background:radial-gradient(120% 70% at 50% 110%, rgba(52,20,12,.86), rgba(6,5,6,.86) 70%)}
+.overlay.mood-aurora{background:radial-gradient(130% 70% at 50% -10%, rgba(10,42,34,.86), rgba(4,6,10,.88) 70%)}
+.overlay.mood-moon{background:radial-gradient(110% 70% at 85% -10%, rgba(24,34,58,.86), rgba(4,6,10,.88) 70%)}
+.overlay.mood-storm{background:linear-gradient(rgba(14,20,32,.88), rgba(5,6,9,.9))}
+.overlay.mood-noon{background:radial-gradient(120% 70% at 50% -10%, rgba(60,52,30,.84), rgba(10,9,6,.86) 70%)}
+.overlay.mood-love{background:radial-gradient(110% 70% at 10% 100%, rgba(56,28,14,.86), rgba(8,6,5,.86) 70%)}
+.overlay.mood-grave, .overlay.mood-mine{background:rgba(4,5,6,.88)}
+
+/* 骰子、判词、结果 */
+.fx-reveal .dice > *{animation:fxFade .3s .4s both}
+.fx-reveal .dice > .die{animation:fxDie .62s cubic-bezier(.2,.7,.3,1) both}
+.fx-reveal .dice > .die + .die{animation-delay:.07s}
+@keyframes fxDie{0%{opacity:0; transform:translateY(-16px) rotate(-220deg) scale(.5)} 55%{opacity:1} 80%{transform:translateY(1px) rotate(8deg)} 100%{transform:none}}
+.fx-reveal .dice > .verdict{animation:fxStamp .4s .62s cubic-bezier(.2,1.5,.4,1) both; display:inline-block}
+@keyframes fxStamp{0%{opacity:0; transform:scale(2.6) rotate(-14deg)} 100%{opacity:1; transform:none}}
+.fx-reveal .verdict.ok{text-shadow:0 0 12px rgba(122,179,106,.55)}
+.fx-reveal .verdict.bad{text-shadow:0 0 12px rgba(208,64,46,.6)}
+.fx-reveal > .prose{animation:fxUp .45s .05s ease-out both}
+.fx-reveal.has-roll > .prose{animation-delay:.8s}
+.fx-reveal .fx .chip{animation:fxPop .38s ease-out both}
+.fx-reveal > .scene-foot{animation:fxFade .3s .3s both}
+.fx-reveal.has-roll > .scene-foot{animation-delay:1s}
+
+/* 选项划过时的一道金光 */
+.ch::after{content:""; position:absolute; inset:0; pointer-events:none; border-radius:inherit; opacity:0; transition:opacity .2s;
+  background:linear-gradient(105deg, transparent 35%, rgba(227,169,72,.11) 50%, transparent 65%) no-repeat; background-size:240% 100%; background-position:130% 0}
+.ch:hover:not(:disabled)::after{opacity:1; animation:fxSheen 1.1s ease-out both}
+@keyframes fxSheen{from{background-position:130% 0} to{background-position:-30% 0}}
+
+/* 决斗 */
+.fx-hitme > .scene{animation:fxShake .44s both}
+.fx-hitme::after{content:""; position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at center, transparent 35%, rgba(190,30,20,.5)); animation:fxFlash .6s both}
+.fx-hitme .duel-side:not(.r) .a{animation:fxRed .55s both}
+.fx-hithim .duel-side.r .a{position:relative; animation:fxJolt .42s both}
+.fx-hithim .duel-side.r .a::after{content:""; position:absolute; left:-25%; top:46%; width:150%; height:3px; border-radius:2px; transform:rotate(-38deg) scaleX(0);
+  background:linear-gradient(90deg, transparent, #fff 40%, #ffe2a6 60%, transparent); box-shadow:0 0 10px #ffcf7a; animation:fxSlash .42s both}
+.fx-clash .duel-vs{position:relative; animation:fxPulse .45s both}
+.fx-clash .duel-vs::after{content:""; position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px; border-radius:50%; background:#fff1c8;
+  box-shadow:16px 0 0 #ffcf6a, -16px 0 0 #ffcf6a, 0 14px 0 #ffb347, 0 -14px 0 #ffb347, 11px 11px 0 #fff0c8, -11px -11px 0 #fff0c8, 11px -11px 0 #ffcf6a, -11px 11px 0 #ffcf6a; animation:fxSpark .5s ease-out both}
+.pips i.fx-brk{animation:fxBrk .7s both}
+.fx-won .scene-h h2{color:var(--flame); animation:fxWin 1.4s ease-out both}
+.fx-lost > .scene{filter:saturate(.55) brightness(.9); transition:filter 1s}
+@keyframes fxShake{0%,100%{transform:none} 15%{transform:translate(-9px,2px)} 30%{transform:translate(8px,-2px)} 45%{transform:translate(-6px,1px)} 60%{transform:translate(4px,0)} 80%{transform:translate(-2px,0)}}
+@keyframes fxFlash{0%{opacity:0} 15%{opacity:1} 100%{opacity:0}}
+@keyframes fxRed{0%,40%{filter:sepia(1) saturate(6) hue-rotate(-40deg) brightness(1.1)} 100%{filter:none}}
+@keyframes fxJolt{0%,100%{transform:none} 20%{transform:translateX(7px) rotate(4deg)} 45%{transform:translateX(-4px) rotate(-2deg)} 70%{transform:translateX(2px)}}
+@keyframes fxSlash{0%{transform:rotate(-38deg) scaleX(0); opacity:1} 50%{transform:rotate(-38deg) scaleX(1); opacity:1} 100%{transform:rotate(-38deg) scaleX(1); opacity:0}}
+@keyframes fxPulse{0%{transform:scale(1)} 30%{transform:scale(1.35); text-shadow:0 0 14px #ffcf6a} 100%{transform:scale(1)}}
+@keyframes fxSpark{0%{transform:scale(.2); opacity:1} 100%{transform:scale(2.6); opacity:0}}
+@keyframes fxBrk{0%{background:var(--rubric); border-color:var(--rubric); transform:rotate(45deg) scale(1.2)} 35%{transform:rotate(45deg) scale(1.7); box-shadow:0 0 12px var(--rubric); opacity:.7} 100%{transform:rotate(45deg) scale(.75); opacity:1}}
+@keyframes fxWin{0%{text-shadow:0 0 0 rgba(227,169,72,0); transform:scale(1.6); opacity:0} 40%{text-shadow:0 0 24px rgba(227,169,72,.9); transform:none; opacity:1} 100%{text-shadow:0 0 8px rgba(227,169,72,.35)}}
+
+/* 地图 */
+.map .road.mine{stroke-dasharray:7 5; animation:fxDash 1.4s linear infinite}
+@keyframes fxDash{to{stroke-dashoffset:-24}}
+.map .node.here circle:first-of-type{transform-box:fill-box; transform-origin:center; animation:fxBeat 2.6s ease-in-out infinite}
+@keyframes fxBeat{0%,100%{transform:scale(1)} 50%{transform:scale(1.18); filter:drop-shadow(0 0 5px rgba(208,64,46,.8))}}
+.map .fx-trip{stroke:var(--flame); stroke-width:3.4; stroke-linecap:round; filter:drop-shadow(0 0 4px rgba(227,169,72,.85))}
+.map .fx-rider circle{fill:#fff3d6; stroke:var(--flame); stroke-width:2}
+.map .fx-rider .halo{fill:rgba(227,169,72,.3); stroke:none; transform-box:fill-box; transform-origin:center; animation:fxHalo .7s ease-out infinite}
+@keyframes fxHalo{from{transform:scale(.4); opacity:1} to{transform:scale(1.4); opacity:0}}
+.map .node.fx-dest circle:first-of-type{fill:var(--flame-bg); stroke-width:3; transform-box:fill-box; transform-origin:center; animation:fxBeat .7s ease-in-out infinite}
+
+/* 主界面 */
+.place.fx-arrive h2{animation:fxInk 1.1s .1s ease-out both}
+@keyframes fxInk{from{clip-path:inset(0 100% 0 0); opacity:.3} to{clip-path:inset(0 0 0 0); opacity:1}}
+.place.fx-arrive .emblem{animation:fxEmblem 1s ease-out both}
+@keyframes fxEmblem{from{opacity:0; transform:rotate(-80deg) scale(.4)} to{opacity:1; transform:none}}
+.place.fx-arrive .place-d, .place.fx-arrive .echo{animation:fxUp .6s .4s ease-out both}
+.place.fx-moved > :not(.fx-cv):not(.emblem){animation:fxFade .4s ease-out both}
+.place.fx-phase > .fx-cv{animation:fxFade 1.8s ease-out both}
+.place .echo.fx-echo{animation:fxUp .45s ease-out both}
+#fx-wash{position:fixed; inset:0; z-index:40; pointer-events:none; opacity:0; background-size:300% 100%;
+  background-image:linear-gradient(100deg, transparent 20%, rgba(255,214,150,.17) 50%, transparent 80%)}
+#fx-wash.go{animation:fxWash 1.6s ease-in-out both}
+@keyframes fxWash{0%{opacity:0; background-position:100% 0} 25%{opacity:1} 100%{opacity:0; background-position:0 0}}
+.topbar.fx-newday .when b{display:inline-block; animation:fxDate .9s ease-out both}
+@keyframes fxDate{0%{opacity:0; transform:translateY(-8px)} 60%{opacity:1; color:var(--flame)} 100%{transform:none}}
+.top-btns .badge{animation:fxBadge 2.6s ease-in-out infinite}
+@keyframes fxBadge{0%,100%{box-shadow:0 0 0 0 rgba(208,64,46,0)} 50%{box-shadow:0 0 0 4px rgba(208,64,46,.25)}}
+
+/* 标题、序幕、结局 */
+.chalice svg{animation:fxChalice 4.2s ease-in-out infinite}
+@keyframes fxChalice{0%,100%{filter:drop-shadow(0 6px 18px rgba(192,57,43,.25))} 50%{filter:drop-shadow(0 4px 30px rgba(222,78,52,.6))}}
+.fx-title .chalice{animation:fxRise 1.1s ease-out both}
+.fx-title .title-h{animation:fxTitle 1.6s .2s ease-out both}
+@keyframes fxTitle{from{opacity:0; letter-spacing:.5em; filter:blur(6px)} to{opacity:1; letter-spacing:.2em; filter:none}}
+.fx-title .title-lat, .fx-title .orn-div{animation:fxFade 1s .9s both}
+.fx-title .title-p{animation:fxUp .8s 1.1s ease-out both}
+.fx-title .title-p + .title-p{animation-delay:1.3s} .fx-title .title-p + .title-p + .title-p{animation-delay:1.5s}
+.fx-title .heraldry, .fx-title .motto, .fx-title .title-btns{animation:fxFade .8s 1.7s both}
+.fx-page > :not(.fx-cv){animation:fxUp .7s ease-out both}
+.fx-page > .proto-art{animation:fxRise 1s ease-out both}
+.fx-page > .proto-where{animation:fxTitle 1.2s .15s ease-out both}
+.fx-page > .proto-text{animation-delay:.45s}
+.fx-end > :not(.fx-cv){animation:fxRise .8s ease-out both}
+#toast.fx-pop{animation:fxToast .5s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes fxToast{from{opacity:0; transform:translateX(-50%) translateY(18px) scale(.95)} to{opacity:1; transform:translateX(-50%)}}
+
+@media (prefers-reduced-motion:reduce){
+  .fx-cv, #fx-wash{display:none}
+  .chalice svg, .map .road.mine, .map .node.here circle, .top-btns .badge, .ch::after{animation:none!important}
+}`;
+  // 主样式表在 body 里，要排在所有样式后面才压得住
   const last = [...document.querySelectorAll('style')].pop();
   if (last) last.after(st); else document.head.appendChild(st);
 })();

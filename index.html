@@ -1317,6 +1317,7 @@ function hdBrow(x, F, expr, side) {
   else if (expr === 'angry') { io = 3; oo = -.8; ar = 0; }
   else if (expr === 'sad') { io = -2.4; oo = 1.6; ar = .8; }
   else if (expr === 'fear') { io = -3; oo = -1; ar = 2.4; }
+  oo += F.btilt || 0;
   const xi = x - side * w * .95, xo = x + side * w * 1.2, yi = by + io, yo = by + oo, xc = x + side * w * .15, yc = by - ar + (io + oo) / 2, t = F.bw / 2;
   return `<path d="M${xi} ${yi - t} Q${xc} ${yc - t * .9} ${xo} ${yo - t * .2} Q${xc} ${yc + t * .6} ${xi} ${yi + t}Z" fill="${F.bc}" stroke="${F.bc}" stroke-width=".5" stroke-linejoin="round"/>`;
 }
@@ -1385,6 +1386,415 @@ openProfile = function (id) {
   const box = document.querySelector('#modal-root .scene .row > div:first-child');
   if (box && box.querySelector('svg')) { box.style.width = box.style.height = 'clamp(110px, 30vw, 150px)'; }
 };
+// ===== 主角的脸：部件库 =====
+// 和同伴头像一样的手绘画法。脸的上半部分（额头到太阳穴）每种脸型都一样，头发和帽子才能套在任何脸上；
+// 脸型只改下巴，胡子用脸的轮廓本身剪出来，所以也跟着下巴走。
+const PC_SKINS = ['#f7e4d2', '#f0d3b8', '#e6c19e', '#d6aa82', '#c08e66', '#a5754e', '#82573a', '#5e3e2a'];
+const PC_HAIRC = ['#141010', '#2e1e14', '#4e3220', '#6a4424', '#8a4a26', '#b0602e', '#a8844e', '#d4ae6c', '#9a958d', '#dcd8d0'];
+const PC_EYEC = ['#2a1c14', '#4a2a1a', '#7a6430', '#3f6a3a', '#4f7aa8', '#6a7680', '#5a6a8a'];
+const PC_OUTC = ['#7a1f24', '#9a4a1e', '#2e5a3a', '#24407a', '#3a2a5a', '#5a3a6a', '#7a6a4a', '#1e1c22', '#d4cfc4'];
+const PC_BG = {auto:null, crimson:['#8a3026', '#2a0e0b'], azure:['#3a5a8a', '#0e1626'], vert:['#3e6a3a', '#0f180d'], amber:['#946020', '#22150a'],
+  slate:['#4e5a70', '#13161e'], violet:['#5a3a6a', '#170e1c'], sable:['#3a3430', '#0c0a09'], dusk:['#8a6430', '#191a2a']};
+const PC_TINCT_BG = {or:'amber', argent:'slate', gules:'crimson', azure:'azure', vert:'vert', sable:'sable', purpure:'violet'};
+const PCF = {
+  face:[['oval', '鹅蛋脸'], ['square', '方脸'], ['round', '圆脸'], ['long', '长脸'], ['heart', '瓜子脸'], ['gaunt', '瘦削脸']],
+  eyes:[['almond', '杏眼'], ['round', '圆眼'], ['narrow', '细长眼'], ['down', '下垂眼'], ['up', '上挑眼'], ['deep', '深眼窝']],
+  brow:[['arch', '弯眉'], ['flat', '平眉'], ['thick', '浓眉'], ['thin', '细眉'], ['sword', '剑眉']],
+  nose:[['straight', '直鼻'], ['hook', '鹰钩鼻'], ['small', '小鼻子'], ['broad', '宽鼻'], ['broken', '断过的鼻子']],
+  mouth:[['mid', '寻常'], ['thin', '薄唇'], ['full', '丰唇'], ['wide', '阔嘴'], ['small', '小嘴']],
+  age:[['young', '年轻'], ['prime', '壮年'], ['older', '有了年纪']],
+  hair:[['crop', '短发'], ['bowl', '碗形发'], ['wavy', '及肩卷发'], ['long', '长发'], ['braid', '单辫'], ['braids', '双辫'], ['bun', '盘发'], ['wild', '乱发'], ['curly', '卷发'], ['buzz', '寸头'], ['tonsure', '修士剃发'], ['bald', '光头']],
+  beard:[['none', '无须'], ['stubble', '胡茬'], ['short', '短须'], ['full', '络腮胡'], ['forked', '分叉长须'], ['mustache', '八字须'], ['droop', '垂须'], ['goatee', '山羊胡']],
+  head:[['none', '不戴'], ['coif', '锁甲头罩'], ['bascinet', '尖顶盔'], ['kettle', '铁帽'], ['hood', '兜帽'], ['chaperon', '缠头帽'], ['felt', '毡帽'], ['kerchief', '头巾'], ['kruseler', '褶边头纱'], ['circlet', '发环'], ['wreath', '花冠']],
+  outfit:[['gambeson', '棉甲'], ['mail', '锁甲罩袍'], ['brig', '铆钉甲'], ['plate', '板甲'], ['cloak', '毛皮斗篷'], ['gown', '长袍'], ['scholar', '学者袍'], ['habit', '修士袍'], ['tunic', '粗布衣']],
+  marks:[['scar', '眉上的疤'], ['cheek', '脸上的疤'], ['freckles', '雀斑'], ['mole', '痣'], ['burn', '烧伤'], ['patch', '眼罩'], ['ruddy', '晒红的脸'], ['tired', '黑眼圈'], ['lashes', '长睫毛']],
+  gear:[['earring', '耳环'], ['cross', '十字架'], ['chalice', '圣杯徽章'], ['rosary', '念珠'], ['scallop', '朝圣扇贝'], ['chain', '金链子']],
+};
+// 脸型：c 是下巴的位置
+const PC_FACE = {
+  oval:{c:82, d:'M39.5 50 Q39.5 29 60 27.5 Q80.5 29 80.5 50 Q80.5 65 73.5 74.5 Q67 82 60 82 Q53 82 46.5 74.5 Q39.5 65 39.5 50Z'},
+  square:{c:83.5, d:'M39.5 50 Q39.5 29 60 27.5 Q80.5 29 80.5 50 Q80.5 64 79 71 L71.5 79.5 Q66 83.5 60 83.5 Q54 83.5 48.5 79.5 L41 71 Q39.5 64 39.5 50Z'},
+  round:{c:82, d:'M39.5 50 Q39.5 29 60 27.5 Q80.5 29 80.5 50 Q81.2 68 72.4 77 Q66 82 60 82 Q54 82 47.6 77 Q38.8 68 39.5 50Z'},
+  long:{c:85.5, d:'M39.8 50 Q39.8 29 60 27.5 Q80.2 29 80.2 50 Q80.2 67 75 76.5 Q68.5 85.5 60 85.5 Q51.5 85.5 45 76.5 Q39.8 67 39.8 50Z'},
+  heart:{c:81, d:'M39.5 50 Q39.5 29 60 27.5 Q80.5 29 80.5 50 Q80 62 73.5 72 Q66.5 80.6 60 81 Q53.5 80.6 46.5 72 Q40 62 39.5 50Z'},
+  gaunt:{c:83, d:'M39.5 50 Q39.5 29 60 27.5 Q80.5 29 80.5 50 Q80.5 58 78 63.5 Q74.4 69.6 71.4 75 Q66 82.6 60 83 Q54 82.6 48.6 75 Q45.6 69.6 42 63.5 Q39.5 58 39.5 50Z'},
+};
+const PC_EYE = {almond:{ew:5, eh:3.1}, round:{ew:4.7, eh:3.7}, narrow:{ew:5.4, eh:2.5, tilt:-.4}, down:{ew:5, eh:3, tilt:1.3}, up:{ew:5.2, eh:2.9, tilt:-1.4}, deep:{ew:4.8, eh:2.8}};
+const PC_BROW = {arch:{bw:2.1, arch:2}, flat:{bw:2.3, arch:.6}, thick:{bw:3.3, arch:1.2}, thin:{bw:1.3, arch:2.3}, sword:{bw:2.6, arch:.5, btilt:-1.9}};
+const PC_MOUTH = {mid:{mw:5.4}, thin:{mw:5.2}, full:{mw:5.2, fill:true}, wide:{mw:6.6}, small:{mw:4.2, fill:true}};
+
+// 颜色：混一点黑或白
+function pcMix(a, b, t) {
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = p(a), B = p(b);
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+const PC_MAIL = '#8b9098', PC_STEEL = ['#c4c9cf', '#6a7078'], PC_LINEN = '#f2eee4';
+const pcMailFill = (d, u, w = .9) => hdFp(d, PC_MAIL, w) + `<path d="${d}" fill="url(#pm${u})"/>`;
+const pcSteel = (d, u, w = 1) => hdFp(d, `url(#ps${u})`, w);
+
+// ----- 头发：b 在脸后面，f 盖在额头上，x 垂在身前 -----
+function pcHair(k, hc, u) {
+  const dk = pcMix(hc, '#000000', .35), hi = pcMix(hc, '#ffffff', .28), ln = (d, w = .7) => hdLn(d, w, dk, .8);
+  const backS = 'M38.5 56 Q35.5 29 60 22 Q84.5 29 81.5 56 Q79 41 60 37.5 Q41 41 38.5 56Z';
+  const partF = 'M39.5 52 Q39 32 52 27 Q60 25 68 27 Q81 32 80.5 52 Q78 40 70 35.4 Q64 33.6 60 35.2 Q56 33.6 50 35.4 Q42 40 39.5 52Z';
+  switch (k) {
+    case 'crop': return {b:hdFp(backS, hc), f:hdFp('M39.5 50 Q38 30 52 25.5 Q60 23.4 68 25.5 Q82 30 80.5 50 Q78.5 40 72 35.5 Q65 32.6 60 34.2 Q55 32.6 48 35.5 Q41.5 40 39.5 50Z', hc) + ln('M44 40 l2 -3 M49 36 l2 -2.6 M57 33.6 l1.6 -2.6 M64 33.6 l1.8 2.4 M70 36 l2 2.4 M75 39 l2 3') + hdLn('M46 30 Q52 26.4 58 26', 1.2, hi, .8)};
+    case 'bowl': return {b:'', f:hdFp('M37.6 56 Q35.4 25 60 20.6 Q84.6 25 82.4 56 L80.4 56 Q80.2 46 77 41.8 Q60 38.6 43 41.8 Q39.8 46 39.6 56Z', hc) + ln('M46 26.6 L45 41 M52 23.6 L51.4 40 M60 22.6 L60 39 M68 23.6 L68.6 40 M74 26.6 L75 41', .55) + hdLn('M44 28 Q52 23 60 22.6', 1.2, hi, .8)};
+    case 'wavy': return {b:hdFp('M31 94 Q24 64 31.6 40 Q39 19 60 18.6 Q81 19 88.4 40 Q96 64 89 94 Q84 90 81 82 L39 82 Q36 90 31 94Z', hc) + ln('M34 52 Q31 64 34 78 M86 52 Q89 64 86 78'),
+      f:hdFp('M39.5 54 Q36.6 30 54 24 Q62 21.8 70 24.6 Q84.6 31 80.5 56 Q78.6 43 71.6 36.4 Q64.6 33.6 58 36.4 Q50 33.4 45.4 39.6 Q41.4 45 39.5 54Z', hc) + ln('M48 28 Q54 25 62 25.6 M68 27 Q75 30 78 37') + hdLn('M50 27.4 Q56 24.6 63 24.8', 1.2, hi, .8),
+      x:hdFp('M39.6 50 Q33.6 62 35.6 78 Q37.4 88 43 92 Q39.6 80 41.4 68 Q42 60 41 52Z', hc, .9) + hdFp('M80.4 50 Q86.4 62 84.4 78 Q82.6 88 77 92 Q80.4 80 78.6 68 Q78 60 79 52Z', hc, .9)};
+    case 'long': return {b:hdFp('M29 106 Q23 72 29 44 Q36 19 60 18.6 Q84 19 91 44 Q97 72 91 106 Q85 100 80 88 L40 88 Q35 100 29 106Z', hc) + ln('M34 50 Q30 74 33 98 M86 50 Q90 74 87 98'),
+      f:hdFp('M39.5 52 Q38 28 60 24.4 Q82 28 80.5 52 Q78 38 68 31 Q62.4 29 60 30.2 Q57.6 29 52 31 Q42 38 39.5 52Z', hc) + ln('M60 25 Q55 30 50 40 M60 25 Q65 30 70 40') + hdLn('M48 29.4 Q53 26.4 58 26 M63 26.4 Q68 27 72 30', 1.2, hi, .8),
+      x:hdFp('M39 52 Q32.6 70 34.4 92 Q36 100 42.4 104.4 Q40 90 42 76 Q42.4 64 41 54Z', hc, .9) + hdFp('M81 52 Q87.4 70 85.6 92 Q84 100 77.6 104.4 Q80 90 78 76 Q77.6 64 79 54Z', hc, .9), ears:false};
+    case 'braid': return {b:hdFp('M37 60 Q33 30 60 22 Q87 30 83 60 Q80 44 60 40 Q40 44 37 60Z', hc),
+      f:hdFp('M38.5 51 Q36.5 31 52 26 Q60 23.4 68 26 Q83.5 31 81.5 51 Q79 38 70 34 Q64 31.6 60 33.2 Q56 31.6 50 34 Q41 38 38.5 51Z', hc) + hdLn('M60 25 L60 32.6', .9, dk) + hdLn('M44 33 Q50 27.6 57 26.6', 1.3, hi, .8),
+      x:hdBraid(41, 66, 33, 108, 8, 4.1, hc, '#b3262a')};
+    case 'braids': return {b:hdFp('M37.6 58 Q34.6 30 60 23 Q85.4 30 82.4 58Z', hc), f:hdFp(partF, hc) + hdLn('M60 26 L60 35', .9, dk) + hdLn('M46 31 Q52 27.4 58 27', 1.2, hi, .8),
+      x:hdBraid(42.4, 66, 40, 110, 9, 3.5, hc, '#3a8a8a') + hdBraid(77.6, 66, 80, 110, 9, 3.5, hc, '#b3262a')};
+    case 'bun': return {b:hdFp('M38 58 Q35 30 60 22 Q85 30 82 58Z', hc) + hdFp('M49 21 Q49 11 60 10.6 Q71 11 71 21 Q71 27 60 27.4 Q49 27 49 21Z', hc) + ln('M53 16 Q60 12 67 17 M52.6 21 Q60 15.6 67.4 21.4 M54 25 Q60 21 66 25'),
+      f:hdFp('M39.5 50 Q39 31 52 26.6 Q60 24.6 68 26.6 Q81 31 80.5 50 Q78 39 70 34.6 Q64 32.4 60 34 Q56 32.4 50 34.6 Q42 39 39.5 50Z', hc) + hdLn('M60 25.4 L60 33.6', .9, dk) + hdLn('M45 33 Q50 28 57 26.8 M63 26.8 Q70 28 75 33', 1.1, hi, .75)};
+    case 'wild': return {b:hdFp('M36 60 Q31 28 60 20 Q89 28 84 60Z', hc),
+      f:hdFp('M38.6 54 L35 44 L40.6 43 L37.6 33 L44.6 35 L44 25 L51 30 L54 20.6 L58.6 28 L63.6 19.6 L66.4 28.4 L73 21.6 L73.4 31 L80.6 27.6 L78.4 36 L85 37.6 L80 43.6 L84.6 49.6 L80.6 50.6 Q78 40 70 35.6 Q64 33 60 34.4 Q55 33 48 36.6 Q41.6 41 40 52Z', hc) + ln('M46 34 l3 -5 M56 30 l1 -5 M66 30 l2 -5 M74 34 l3 -4')};
+    case 'curly': {
+      const cl = [[40, 32, 14], [60, 24, 16], [80, 32, 14], [32, 50, 12], [88, 50, 12], [33, 64, 9], [87, 64, 9], [47, 22, 12], [73, 22, 12]];
+      let f = '';
+      for (let i = 0; i <= 10; i++) { const a = (196 + i * 14.8) * Math.PI / 180, x = 60 + Math.cos(a) * 20.6, y = 47 + Math.sin(a) * 18.6; f += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${i % 2 ? 5.6 : 6.2}" fill="${hc}" stroke="${HD_INK}" stroke-width=".8"/>`; }
+      return {b:cl.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${hc}" stroke="${HD_INK}" stroke-width=".8"/>`).join(''), f:f + ln('M45 31 q2 2 4 0 M56 26 q2 2 4 0 M66 28 q2 2 4 0 M74 35 q2 2 4 0')};
+    }
+    case 'buzz': return {b:'', f:`<path d="M39.5 50 Q39.5 29 60 27.4 Q80.5 29 80.5 50 Q78.6 40 72 36.6 Q65 34.4 60 35.4 Q55 34.4 48 36.6 Q41.4 40 39.5 50Z" fill="${hc}" opacity=".62"/>` + hdLn('M44 40 Q52 35.6 60 35.4 Q68 35.6 76 40', .6, dk, .6), shave:true};
+    case 'tonsure': return {b:hdFp(backS, hc), f:hdFp('M39.5 52 Q38 30 54 26 Q60 24.6 66 26 Q82 30 80.5 52 Q78 40 72 36 Q64 33 60 34.6 Q52 33 47 36 Q42 40 39.5 52Z', hc) + `<ellipse cx="60" cy="28.6" rx="6.8" ry="2.4" fill="#dfbb98" stroke="${HD_INK}" stroke-width=".5"/>` + ln('M44 40 l2 -3 M49 36 l2 -2.6 M70 36 l2 2.4 M75 39 l2 3')};
+    case 'bald': return {b:'', f:'<ellipse cx="52.6" cy="34" rx="7.4" ry="3" fill="#fff" opacity=".2"/>', shave:true};
+  }
+  return {b:'', f:''};
+}
+
+// ----- 胡子：把脸的轮廓加粗描一遍，再用胡子的范围剪出来 -----
+function pcBeard(k, P, hc, u) {
+  if (k === 'none' || !k) return {under:'', over:''};
+  const {c, my, d} = P, dk = pcMix(hc, '#000000', .3);
+  const must = hdFp(`M50 ${my - 1} Q55 ${my - 4.2} 60 ${my - 2.6} Q65 ${my - 4.2} 70 ${my - 1} Q66 ${my + .4} 60 ${my - .6} Q54 ${my + .4} 50 ${my - 1}Z`, hc, .7);
+  const region = {
+    full:`M26 50 L39 50 Q42 ${my - 6} 49 ${my - 2} Q55 ${my - 4.2} 60 ${my - 3} Q65 ${my - 4.2} 71 ${my - 2} Q78 ${my - 6} 81 50 L94 50 L94 116 L26 116Z`,
+    short:`M26 58 L40.5 58 Q44 ${my - 2} 50 ${my} Q55 ${my - 2} 60 ${my - 1.2} Q65 ${my - 2} 70 ${my} Q76 ${my - 2} 79.5 58 L94 58 L94 116 L26 116Z`,
+    goatee:`M51 ${my + 1.2} Q51 ${my - 1} 60 ${my - .6} Q69 ${my - 1} 69 ${my + 1.2} L69 ${c + 4} L51 ${c + 4}Z`,
+  };
+  const cut = (reg, sw, op = 1) => `<clipPath id="pb${u}"><path d="${reg}"/></clipPath><g clip-path="url(#pb${u})"${op < 1 ? ` opacity="${op}"` : ''}>`
+    + (sw ? `<path d="${d}" fill="none" stroke="${HD_INK}" stroke-width="${sw + 2}" stroke-linejoin="round"/>` : '') + `<path d="${d}" fill="${hc}"${sw ? ` stroke="${hc}" stroke-width="${sw}" stroke-linejoin="round"` : ''}/></g>`;
+  const lipPatch = `<ellipse cx="60" cy="${my + 2.6}" rx="4.4" ry="1.9" fill="#b07a64"/>`;
+  const strands = hdLn(`M45 ${my - 2} l1 3 M50 ${my + 4} l.6 3 M56 ${c - 2.6} l.2 3 M64 ${c - 2.6} l-.2 3 M70 ${my + 4} l-.6 3 M75 ${my - 2} l-1 3`, .6, pcMix(hc, '#ffffff', .25), .7);
+  switch (k) {
+    case 'stubble': return {under:cut(region.full, 0, .3), over:''};
+    case 'short': return {under:cut(region.short, 3) + strands + lipPatch, over:must};
+    case 'full': return {under:cut(region.full, 7) + strands + lipPatch, over:must};
+    case 'forked': return {under:hdFp(`M50 ${c} L54.4 ${c + 13} L60 ${c + 5.4} L65.6 ${c + 13} L70 ${c}Z`, hc, .8) + cut(region.full, 6) + strands + lipPatch, over:must};
+    case 'goatee': return {under:cut(region.goatee, 2.4) + lipPatch, over:must};
+    case 'mustache': return {under:'', over:must};
+    case 'droop': return {under:'', over:hdFp(`M50 ${my - 1} Q55 ${my - 4.2} 60 ${my - 2.6} Q65 ${my - 4.2} 70 ${my - 1} Q72.8 ${my + 4} 71.8 ${c - 1} Q70.4 ${c - 2.6} 69.2 ${my + 2.6} Q65 ${my} 60 ${my - .4} Q55 ${my} 50.8 ${my + 2.6} Q49.6 ${c - 2.6} 48.2 ${c - 1} Q47.2 ${my + 4} 50 ${my - 1}Z`, hc, .7) + hdLn(`M51.6 ${my + 3} Q50.6 ${my + 7} 49.6 ${c - 2} M68.4 ${my + 3} Q69.4 ${my + 7} 70.4 ${c - 2}`, .5, dk, .7)};
+  }
+  return {under:'', over:''};
+}
+
+// ----- 鼻子：nt 是鼻尖的高度 -----
+function pcNose(k, nt) {
+  const sh = hdSh(`M61 52 Q64 59 64.4 ${nt} Q62.4 ${nt + .6} 61 ${nt - 1}Z`, .13);
+  const L = d => hdLn(d, .95, HD_INK, .75);
+  switch (k) {
+    case 'hook': return sh + L(`M60 51 Q63.4 56.6 61.6 ${nt - 1.4} Q60.4 ${nt + 1.6} 57.4 ${nt + 1.2} Q59 ${nt + 3} 60.6 ${nt + 2.2} Q62.4 ${nt + 3} 64.2 ${nt + 1.2}`) + hdLn('M61.4 54.4 Q62.8 56 62.4 58', .7, HD_INK, .45);
+    case 'small': return hdSh(`M60.8 ${nt - 6} Q62.6 ${nt - 2} 62.6 ${nt} Q61.4 ${nt + .6} 60.6 ${nt}Z`, .1) + L(`M60.4 ${nt - 4} Q60 ${nt - 1} 58.4 ${nt + .4} Q60 ${nt + 1.6} 62 ${nt + .4}`);
+    case 'broad': return sh + L(`M59.6 54 Q59 ${nt - 2} 56.2 ${nt} Q55 ${nt + 1.8} 57 ${nt + 2.4} Q59 ${nt + 3} 60.4 ${nt + 2.2} Q62 ${nt + 3} 64 ${nt + 2.4} Q66 ${nt + 1.8} 64.8 ${nt}`) + hdLn(`M55.6 ${nt - 1} Q54.4 ${nt + 1} 55.4 ${nt + 2.4} M64.4 ${nt - 1} Q65.6 ${nt + 1} 64.6 ${nt + 2.4}`, .6, HD_INK, .45);
+    case 'broken': return sh + L(`M60 51 L61.6 56.4 L59.4 ${nt - 1.6} Q57.4 ${nt} 56.8 ${nt + 1.2} Q59.2 ${nt + 2.6} 60.6 ${nt + 1.9} Q62.6 ${nt + 2.6} 64.2 ${nt + 1.2}`) + hdLn('M60.4 55.6 l2.2 -.6', .7, HD_INK, .5);
+  }
+  return sh + L(`M60 52 L59.2 ${nt - 2} Q57.2 ${nt} 56.6 ${nt + 1.2} Q59 ${nt + 2.6} 60.4 ${nt + 1.9} Q62.4 ${nt + 2.6} 64 ${nt + 1.2}`);
+}
+// ===== 主角的脸：头饰、衣甲、身上的小东西 =====
+// 头饰分 back（脸后面）、body（盖在衣服上）、front（盖在头发上）；hide 表示盖住头发，ears 表示盖住耳朵。
+function pcHead(k, oc, u, P) {
+  const c = P.c;
+  switch (k) {
+    case 'coif': return {hide:true, ears:false,
+      back:pcMailFill('M27 106 Q21 36 60 16.6 Q99 36 93 106Z', u),
+      front:pcMailFill('M33 76 Q27 26 60 20 Q93 26 87 76 Q85 40 60 33 Q35 40 33 76Z', u) + pcMailFill(`M38.6 77 Q60 ${c + 9} 81.4 77 L85 92 Q60 102 35 92Z`, u) + hdSh('M33 76 Q27 26 60 20 Q93 26 87 76 Q85 40 60 33 Q35 40 33 76Z', .12, '#000')};
+    case 'bascinet': return {hide:true, ears:false,
+      back:pcMailFill('M36.4 62 Q34 92 60 97 Q86 92 83.6 62 Q92 80 97 110 Q60 120 23 110 Q28 80 36.4 62Z', u),
+      front:pcSteel('M35.6 64 Q33 32 60 11 Q87 32 84.4 64 Q81 44 60 36.4 Q39 44 35.6 64Z', u) + hdLn('M60 11.6 L60 36', .8, '#4a4e56', .8)
+        + [[38.6, 56], [40.6, 46.4], [46, 39.6], [53, 37], [67, 37], [74, 39.6], [79.4, 46.4], [81.4, 56]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".95" fill="#e4e6ea" stroke="${HD_INK}" stroke-width=".4"/>`).join('')
+        + hdLn('M44 30 Q50 20 58 15', 1.4, '#fff', .45)};
+    case 'kettle': return {hide:false, ears:true, back:'',
+      front:hdSh('M40 40 Q60 34 80 40 L80 46 Q60 41 40 46Z', .18, '#000') + pcSteel('M38.4 40 Q38 17 60 15.4 Q82 17 81.6 40 Q60 34.6 38.4 40Z', u)
+        + pcSteel('M27.6 43.6 Q60 31 92.4 43.6 Q95 47.6 89.6 48.8 Q60 38.4 30.4 48.8 Q25 47.6 27.6 43.6Z', u, .9) + hdLn('M60 15.6 L60 35.6', .8, '#4a4e56', .8)
+        + hdLn('M44 30 Q48 20 56 17', 1.4, '#fff', .45) + [44, 52, 60, 68, 76].map(x => `<circle cx="${x}" cy="${(40 - Math.abs(x - 60) * -.04 - 2.6).toFixed(1)}" r=".8" fill="#e4e6ea"/>`).join('')};
+    case 'hood': {
+      const hc = pcMix(oc, '#000000', .12);
+      return {hide:true, ears:false, back:hdFp('M24 112 Q18 34 60 13 Q102 34 96 112Z', hc),
+        body:hdFp('M16 110 Q24 92 42 87 L78 87 Q96 92 104 110 Q82 102 60 105 Q38 102 16 110Z', hc) + hdLn('M30 96 Q34 102 32 108 M90 96 Q86 102 88 108', .6, pcMix(hc, '#000000', .35), .8),
+        front:hdFp('M31 66 Q28 22 60 19 Q92 22 89 66 Q86 36 60 31 Q34 36 31 66Z', hc) + hdLn('M37 48 Q42 34 60 30.6 Q78 34 83 48', .7, pcMix(hc, '#000000', .35), .7)};
+    }
+    case 'chaperon': {
+      const hc = pcMix(oc, '#000000', .1), dk = pcMix(oc, '#000000', .4);
+      return {hide:false, ears:true, back:hdFp('M78 40 Q92 54 90 80 Q86 84 83 78 Q85 60 76 46Z', hc),
+        front:hdFp('M40 32 Q42 14 60 13 Q80 14 82 32 Q60 26 40 32Z', hc) + hdFp('M33.6 41 Q33 25 60 23 Q87 25 86.4 41 Q86.4 47 80 46.6 Q60 40.6 40 46.6 Q33.6 47 33.6 41Z', hc)
+          + hdLn('M38 31 L42 44 M45 27 L49 42 M53 25 L56 41 M61 24.6 L63 41 M69 25 L70.6 41.6 M76 27 L77.6 43 M82 31 L83 44', .7, dk, .75)};
+    }
+    case 'felt': return {hide:false, ears:true, back:'',
+      front:hdSh('M40 40 Q60 35 80 40 L80 45 Q60 41 40 45Z', .16, '#000') + hdFp('M42 37 Q41 15 60 14 Q79 15 78 37Z', '#6a4a2e') + hdLn('M42.6 32 Q60 28.6 77.4 32', 2.4, '#3a2618')
+        + hdFp('M27 41 Q60 30.6 93 41 Q95 45 89 46 Q60 37.4 31 46 Q25 45 27 41Z', '#5a3e26') + hdLn('M46 20 Q52 16.4 58 15.6', 1.1, '#9a7a56', .7)};
+    case 'kerchief': return {hide:true, ears:false,
+      back:hdFp('M27 104 Q20 40 60 17 Q100 40 93 104Z', PC_LINEN) + hdLn('M33 60 Q31 80 33 98 M87 60 Q89 80 87 98', .6, '#a8a090', .8),
+      front:hdFp('M33 48 Q60 33 87 48 L87 40 Q60 22 33 40Z', PC_LINEN) + hdLn('M38 40 Q60 30 82 40', .6, '#a8a090', .7)};
+    case 'kruseler': return {hide:'front', ears:false,
+      back:hdFp('M27 102 Q21 56 31 36 Q41 17 60 16.4 Q79 17 89 36 Q99 56 93 102 Q78 93 60 93 Q42 93 27 102Z', PC_LINEN) + hdSh('M80 30 Q96 50 93 102 Q86 97 82 95 Q88 60 80 30Z', .12, '#5a4a30'),
+      body:hdFp(`M43 66 Q46 ${c + 4} 60 ${c + 6} Q74 ${c + 4} 77 66 L80 96 Q60 104 40 96Z`, PC_LINEN, .9) + hdLn('M46 90 Q60 96 74 90', .6, '#a8a090', .8),
+      front:hdRuffle(60, 52, 30.4, 3.4, 166, 374, 17) + hdRuffle(60, 52, 27, 3.4, 166, 374, 15) + hdRuffle(60, 52, 23.6, 3.4, 168, 372, 13)};
+    case 'circlet': return {hide:false, ears:true, back:'', front:hdLn('M38.6 41 Q60 33 81.4 41', 2.4, '#d6a84a') + `<circle cx="60" cy="36.6" r="2.3" fill="#b02a1e" stroke="#d6a84a" stroke-width=".8"/>`};
+    case 'wreath': return {hide:false, ears:true, back:'', front:hdWreath(60, 37, 21.5, 13, 188, 352, 13)};
+  }
+  return {hide:false, ears:true, back:'', front:''};
+}
+
+// ----- 衣甲：w 是肩宽的一半，nw 是脖子宽的一半 -----
+function pcOutfit(k, oc, w, nw, u, arms) {
+  const L = x => (60 - x).toFixed(1), R = x => (60 + x).toFixed(1);
+  const body = `M${L(w * 1.62)} 124 Q${L(w * 1.55)} 99 ${L(w * .98)} 92 Q${L(w * .5)} 88 ${L(nw + 1)} 85 L${R(nw + 1)} 85 Q${R(w * .5)} 88 ${R(w * .98)} 92 Q${R(w * 1.55)} 99 ${R(w * 1.62)} 124Z`;
+  const dk = pcMix(oc, '#000000', .3), shade = hdSh(`M${R(w * .5)} 88 Q${R(w * 1.4)} 94 ${R(w * 1.7)} 124 L${R(w * .75)} 124 Q${R(w * .78)} 102 ${R(w * .5)} 88Z`, .18);
+  const clip = `<clipPath id="po${u}"><path d="${body}"/></clipPath>`;
+  const mailCollar = pcMailFill('M44 80 Q60 90 76 80 L79 92 Q60 100 41 92Z', u) + hdSh('M44 80 Q60 90 76 80 L76.6 83 Q60 93 43.4 83Z', .25, '#000');
+  switch (k) {
+    case 'mail': {
+      const tab = `M${L(w * .74)} 124 Q${L(w * .72)} 101 ${L(w * .48)} 95 Q52 92.4 54 93 L66 93 Q68 92.4 ${R(w * .48)} 95 Q${R(w * .72)} 101 ${R(w * .74)} 124Z`;
+      let ch = '';
+      if (arms && arms.ch && arms.ch !== 'none' && typeof chargeSVG === 'function') { const s = .26; ch = `<g transform="translate(${(60 - 50 * s).toFixed(2)} ${(109 - 60 * s).toFixed(2)}) scale(${s})">${chargeSVG(arms.ch, (TINCT[arms.cc] || TINCT.argent).c)}</g>`; }
+      return {body:pcMailFill(body, u, 1.1) + hdFp(tab, oc) + hdSh(`M66 93 Q${R(w * .72)} 101 ${R(w * .74)} 124 L70 124 Q71 104 66 93Z`, .16) + ch, collar:mailCollar};
+    }
+    case 'brig': {
+      let riv = '';
+      for (let y = 96; y < 124; y += 5.2) for (let x = 60 - w * 1.5; x < 60 + w * 1.5; x += 5.4) riv += `<circle cx="${(x + ((y / 5.2 | 0) % 2) * 2.7).toFixed(1)}" cy="${y.toFixed(1)}" r=".85" fill="#d6b25a"/>`;
+      return {body:clip + hdFp(body, oc, 1.1) + `<g clip-path="url(#po${u})">${riv}${hdLn([-2, -1, 0, 1, 2].map(i => `M${60 + i * w * .55} 92 L${60 + i * w * .6} 124`).join(' '), .6, dk, .7)}</g>` + shade, collar:mailCollar};
+    }
+    case 'plate': {
+      const pl = d => pcSteel(d, u);
+      const breast = `M${L(w * .64)} 124 Q${L(w * .68)} 100 ${L(w * .42)} 93 Q60 89.6 ${R(w * .42)} 93 Q${R(w * .68)} 100 ${R(w * .64)} 124Z`;
+      const pauL = `M${L(w * 1.62)} 112 Q${L(w * 1.5)} 92 ${L(w * .8)} 89.6 Q${L(w * .42)} 92 ${L(w * .5)} 104 Q${L(w * 1.05)} 106 ${L(w * 1.62)} 112Z`;
+      const pauR = `M${R(w * 1.62)} 112 Q${R(w * 1.5)} 92 ${R(w * .8)} 89.6 Q${R(w * .42)} 92 ${R(w * .5)} 104 Q${R(w * 1.05)} 106 ${R(w * 1.62)} 112Z`;
+      return {body:hdFp(body, oc, 1.1) + pl(breast) + hdLn('M60 91 L60 124', .9, '#4a4e56', .8) + hdLn(`M${L(w * .3)} 98 Q${L(w * .2)} 108 ${L(w * .28)} 120`, 1.6, '#fff', .35) + pl(pauL) + pl(pauR)
+        + hdLn(`M${L(w * 1.5)} 104 Q${L(w * 1)} 100 ${L(w * .55)} 101 M${R(w * 1.5)} 104 Q${R(w * 1)} 100 ${R(w * .55)} 101`, .7, '#4a4e56', .8),
+        collar:pl('M45 83 Q60 91 75 83 L77.6 92 Q60 100 42.4 92Z')};
+    }
+    case 'cloak': return {body:hdFp(body, oc, 1.1) + shade + hdFp('M52 86 L60 97 L68 86Z', '#e8e0cc', .8),
+      collar:hdFp(`M${L(w * .95)} 93 Q60 104 ${R(w * .95)} 93 Q${R(w * 1.06)} 100 ${R(w * .86)} 105 Q60 113 ${L(w * .86)} 105 Q${L(w * 1.06)} 100 ${L(w * .95)} 93Z`, '#6a4a30', .9)
+        + hdFur([[44, 101, 0, 2.6], [50, 104, 0, 2.6], [56, 105.6, 0, 2.6], [64, 105.6, 0, 2.6], [70, 104, 0, 2.6], [76, 101, 0, 2.6], [38, 98, -.4, 2.4], [82, 98, .4, 2.4]], '#3a2414')
+        + `<circle cx="60" cy="106" r="3.2" fill="#d6a84a" stroke="${HD_INK}" stroke-width=".7"/><circle cx="60" cy="106" r="1.2" fill="#b02a1e"/>`};
+    case 'gown': return {body:hdFp(body, oc, 1.1) + `<g clip-path="url(#po${u})">${hdLn([-3, -2, -1, 1, 2, 3].map(i => `M${60 + i * 8} 92 Q${60 + i * 9} 108 ${60 + i * 8.6} 124`).join(' '), .7, dk, .8)}</g>` + clip + shade
+        + [100, 108, 116].map(y => `<circle cx="60" cy="${y}" r="1.2" fill="#d6a84a" stroke="${HD_INK}" stroke-width=".4"/>`).join(''),
+      collar:hdFp('M48.4 77 L48 91 Q60 96 72 91 L71.6 77 Q60 81 48.4 77Z', dk, .9) + hdLn('M48.4 77.4 Q60 81.4 71.6 77.4', 2, '#6a4a30') + hdLn('M48.4 77.4 Q60 81.4 71.6 77.4', .5, '#3a2414', .8)};
+    case 'scholar': return {body:hdFp(body, oc, 1.1) + hdLn(`M${L(w * .9)} 100 Q${L(w * .8)} 112 ${L(w * .86)} 124 M${R(w * .9)} 100 Q${R(w * .8)} 112 ${R(w * .86)} 124`, .7, pcMix(oc, '#ffffff', .15), .7)
+        + hdFp('M17 106 Q23 92 40 88 Q50 92 60 93 Q70 92 80 88 Q97 92 103 106 Q91 101 80 101 Q70 105 60 105 Q50 105 40 101 Q29 101 17 106Z', pcMix(oc, '#ffffff', .06), .9),
+      collar:hdFp('M40 88 Q50 95 60 96 Q70 95 80 88 Q74 99.6 60 100.6 Q46 99.6 40 88Z', '#ece6da', .8) + [[48, 95.4], [54, 97.6], [66, 97.6], [72, 95.4]].map(([x, y]) => `<path d="M${x} ${y} l.6 1.6 l-.6 .4 l-.6 -.4Z" fill="#555"/>`).join('')};
+    case 'habit': return {body:hdFp(body, oc, 1.1) + shade + hdLn('M44 104 Q46 114 45 124 M76 104 Q74 114 75 124', .6, dk, .8),
+      collar:hdFp('M40 87 Q60 100 80 87 Q85 94 80.6 100.6 Q60 109 39.4 100.6 Q35 94 40 87Z', dk, .9) + hdLn('M44 95 Q60 104 76 95', .6, pcMix(oc, '#000000', .5), .8)};
+    case 'tunic': return {body:hdFp(body, oc, 1.1) + shade + hdLn(`M${L(w * 1.1)} 98 Q${L(w)} 110 ${L(w * 1.06)} 124 M${R(w * 1.1)} 98 Q${R(w)} 110 ${R(w * 1.06)} 124`, .6, dk, .7),
+      collar:hdFp('M53 86 L60 100 L67 86Z', 'var(--pcskin)', .8) + hdLn('M55.4 89 L64.6 91 M56.6 92.4 L63.4 94.4 M57.8 95.8 L62.2 97.4', .7, '#5a3a20') + hdLn('M51 85.4 Q60 89 69 85.4', 1.6, dk)};
+  }
+  // 棉甲
+  return {body:clip + hdFp(body, oc, 1.1) + `<g clip-path="url(#po${u})">${hdLn([-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6].map(i => `M${60 + i * 7} 86 Q${61.5 + i * 7} 104 ${60 + i * 7} 124`).join(' '), .7, dk, .8)}</g>` + shade,
+    collar:hdFp('M46 85 Q60 94 74 85 L76 91 Q60 100 44 91Z', dk, .9)};
+}
+
+// ----- 胸前的小东西 -----
+function pcGear(acc) {
+  let s = '';
+  if (acc.includes('chain')) s += hdLn('M38 98 Q60 120 82 98', 1.4, '#d4a53a') + [42, 50, 70, 78].map(x => `<circle cx="${x}" cy="${(98 + 20 * Math.sin((x - 38) / 44 * Math.PI) * .52).toFixed(1)}" r="1.1" fill="#e8c25a"/>`).join('') + `<circle cx="60" cy="109.4" r="2.4" fill="#b3262a" stroke="#d4a53a" stroke-width=".9"/>`;
+  if (acc.includes('rosary')) s += Array.from({length:11}, (_, i) => { const t = i / 10, x = 36 + t * 30, y = 92 + t * 24 - Math.sin(t * Math.PI) * 4; return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.35" fill="#7a2a1e" stroke="${HD_INK}" stroke-width=".3"/>`; }).join('') + hdLn('M67 116 L67 122 M65 118 L69 118', 1.2, '#d6a84a');
+  if (acc.includes('cross')) s += hdLn('M51 86 Q54 97 60 101 Q66 97 69 86', .5, '#3a2a1a', .8) + hdLn('M60 100.6 L60 112 M56.6 104.4 L63.4 104.4', 2.1, '#d6a84a');
+  if (acc.includes('chalice')) s += `<circle cx="80" cy="107" r="4.8" fill="#efe6d2" stroke="${HD_INK}" stroke-width=".8"/>` + hdFp('M76.8 103.6 Q76.8 107.6 80 108.4 Q83.2 107.6 83.2 103.6Z M79.4 108.4 L79.4 110.2 L77.8 111.2 L82.2 111.2 L80.6 110.2 L80.6 108.4Z', '#b3262a', .5);
+  if (acc.includes('scallop')) s += hdFp('M40 102.6 Q34.6 103.6 35.2 107.6 Q37 111.6 40 112 Q43 111.6 44.8 107.6 Q45.4 103.6 40 102.6Z', '#efe6d2', .7) + hdLn('M40 103.4 L40 111.4 M40 103.4 L37 110.6 M40 103.4 L43 110.6 M40 103.4 L35.6 108 M40 103.4 L44.4 108', .45, '#8a7a5a', .9);
+  return s;
+}
+// ===== 主角的脸：拼起来，接到头像函数上，建角色时一样一样挑 =====
+const PC_DEF = {face:'oval', eyes:'almond', brow:'arch', nose:'straight', mouth:'mid', age:'young', head:'none', bg:'auto'};
+// 旧存档的样子也认：缺的补上，原来放在“别的”里的头罩、兜帽、头巾、发环挪到头饰
+function pcNorm(L) {
+  if (L.pc) return L;
+  for (const [k, v] of Object.entries(PC_DEF)) if (L[k] == null) L[k] = v;
+  const acc = L.acc || (L.acc = []);
+  const moved = {coif:'coif', hood:'hood', veil:'kerchief', circlet:'circlet'};
+  for (const [a, h] of Object.entries(moved)) { const i = acc.indexOf(a); if (i >= 0) { acc.splice(i, 1); if (L.head === 'none') L.head = h; } }
+  if (L.age === 'old') L.age = 'older'; else if (L.age === 'child') L.age = 'young';
+  if (!PCF.hair.some(([k]) => k === L.hair)) L.hair = 'crop';
+  if (!PCF.outfit.some(([k]) => k === L.outfit)) L.outfit = 'gambeson';
+  L.pc = 1;
+  return L;
+}
+const pcIsPlayer = L => (typeof S !== 'undefined' && S && S.p && S.p.look === L) || (typeof draft !== 'undefined' && draft && draft.look === L);
+const pcArmsOf = L => (typeof S !== 'undefined' && S && S.p && S.p.look === L && S.p.arms) || (typeof draft !== 'undefined' && draft && draft.look === L && draft.arms) || null;
+
+const pcCache = new Map();
+function pcSVG(L, opts = {}) {
+  const arms = opts.arms || pcArmsOf(L);
+  const expr = opts.expr || 'calm', acc = L.acc || [];
+  const key = JSON.stringify([L.skin, L.hair, L.hairColor, L.eye, L.beard, L.outfit, L.outfitColor, L.build, acc, L.face, L.eyes, L.brow, L.nose, L.mouth, L.age, L.head, L.bg, arms && [arms.f1, arms.ch, arms.cc], expr, opts.vb, opts.bg, !!opts.dead]);
+  let tpl = pcCache.get(key);
+  if (!tpl) { if (pcCache.size > 400) pcCache.clear(); tpl = pcBuild(L, expr, opts, arms, acc); pcCache.set(key, tpl); }
+  const u = 'p' + (++hdUid);
+  return tpl.replace(/__U__/g, u);
+}
+function pcBuild(L, expr, opts, arms, acc) {
+  const U = '__U__', has = k => acc.includes(k);
+  const skin = L.skin || '#e9c9a6', hc = L.hairColor || '#4e3220', oc = L.outfitColor || '#7a1f24';
+  const FC = PC_FACE[L.face] || PC_FACE.oval, c = FC.c, my = 72.6 + (c - 82) * .45, nt = 66.4 + (c - 82) * .25;
+  const w = {slim:29, avg:33, broad:40}[L.build] || 33, nw = {slim:7, avg:8, broad:9.6}[L.build] || 8;
+  const E = PC_EYE[L.eyes] || PC_EYE.almond, B = PC_BROW[L.brow] || PC_BROW.arch, M = PC_MOUTH[L.mouth] || PC_MOUTH.mid;
+  const dark = parseInt(skin.slice(1, 3), 16) < 150;
+  const F = {ex:[50.5, 69.5], ey:56, ew:E.ew, eh:E.eh, tilt:E.tilt || 0, iris:L.eye || '#4a2a1a', lash:has('lashes'),
+    bc:L.hairColor === '#dcd8d0' || L.hairColor === '#9a958d' ? pcMix(hc, '#000000', .25) : pcMix(hc, '#000000', .3), bw:B.bw, by:B.bw < 1.6 ? 47.4 : 48, arch:B.arch, btilt:B.btilt || 0,
+    mx:60, my, mw:M.mw, lip:dark ? '#6a3028' : '#9a4a40', lipFill:M.fill ? (dark ? '#8a4a40' : '#b8625a') : null, smile:L.mouth === 'wide' ? 'grin' : 'soft', skin};
+  const hair = pcHair(L.hair, hc, U), head = pcHead(L.head || 'none', oc, U, {c}), out = pcOutfit(L.outfit, oc, w, nw, U, arms);
+  const beard = pcBeard(L.beard, {c, my, d:FC.d}, hc, U);
+  const hideHair = head.hide === true, earsOn = head.ears !== false && hair.ears !== false;
+  const bgKey = L.bg && L.bg !== 'auto' ? L.bg : (arms && PC_TINCT_BG[arms.f1]) || 'slate', bg = PC_BG[bgKey] || PC_BG.slate;
+  let s = `<svg viewBox="${opts.vb || '0 0 120 120'}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><clipPath id="hc${U}"><circle cx="60" cy="60" r="60"/></clipPath>`
+    + `<clipPath id="fc${U}"><path d="${FC.d}"/></clipPath>`
+    + `<radialGradient id="hg${U}" cx="40%" cy="30%" r="85%"><stop offset="0" stop-color="${bg[0]}"/><stop offset="1" stop-color="${bg[1]}"/></radialGradient>`
+    + `<linearGradient id="ps${U}" x1="0" y1="0" x2="1" y2=".3"><stop offset="0" stop-color="${PC_STEEL[0]}"/><stop offset=".55" stop-color="#9aa0a8"/><stop offset="1" stop-color="${PC_STEEL[1]}"/></linearGradient>`
+    + `<pattern id="pm${U}" width="3.2" height="3" patternUnits="userSpaceOnUse"><circle cx="1.6" cy="1.5" r="1.1" fill="none" stroke="#3b4048" stroke-width=".6"/></pattern></defs><g clip-path="url(#hc${U})">`;
+  if (opts.bg !== false) s += `<circle cx="60" cy="60" r="60" fill="url(#hg${U})"/><circle cx="60" cy="48" r="34" fill="#fff" opacity=".05"/>`;
+  // 后面：帽子的后摆、头发
+  s += head.back || '';
+  if (!hideHair) s += hair.b || '';
+  // 身子、脖子、领子、帽子盖在肩上的部分、胸前的东西
+  s += out.body;
+  s += hdFp(`M${60 - nw} 72 L${60 - nw} 88 Q60 92 ${60 + nw} 88 L${60 + nw} 72Z`, skin) + hdSh(`M${60 - nw} 76 Q60 83 ${60 + nw} 76 L${60 + nw} 81 Q60 88 ${60 - nw} 81Z`, .2);
+  s += (out.collar || '').replace(/var\(--pcskin\)/g, skin);
+  s += head.body || '';
+  s += pcGear(acc);
+  if (!hideHair && hair.x) s += hair.x;
+  // 耳朵、脸
+  if (earsOn) {
+    s += hdFp('M38.5 51 Q34.5 51 35 57 Q36 63 40.5 62.6Z', skin, .9) + hdFp('M81.5 51 Q85.5 51 85 57 Q84 63 79.5 62.6Z', skin, .9) + hdLn('M37.6 54 Q36.6 57 38.4 60 M82.4 54 Q83.4 57 81.6 60', .5, HD_INK, .4);
+    if (has('earring')) s += `<circle cx="37.4" cy="65.6" r="2.5" fill="none" stroke="#e2b23e" stroke-width="1.3"/><circle cx="82.6" cy="65.6" r="2.5" fill="none" stroke="#e2b23e" stroke-width="1.3"/>`;
+  }
+  s += hdFp(FC.d, skin);
+  s += `<g clip-path="url(#fc${U})"><ellipse cx="81" cy="60" rx="12" ry="32" fill="#3a1d0e" opacity=".14"/><ellipse cx="60" cy="${c + 5}" rx="24" ry="6" fill="#3a1d0e" opacity=".08"/>`;
+  if (L.face === 'gaunt') s += hdSh('M42 60 Q46 68 49 74 Q47 66 46 60Z M78 60 Q74 68 71 74 Q73 66 74 60Z', .14);
+  if (has('ruddy')) s += `<ellipse cx="46.4" cy="64.4" rx="5" ry="2.8" fill="#d9705a" opacity=".24"/><ellipse cx="73.6" cy="64.4" rx="5" ry="2.8" fill="#d9705a" opacity=".24"/><ellipse cx="60" cy="${nt}" rx="2.6" ry="1.6" fill="#d9705a" opacity=".2"/>`;
+  if (has('burn')) s += `<path d="M66 46 Q82 42 82 58 Q81 70 72 72.6 Q67.6 62 66 46Z" fill="${pcMix(skin, '#e8a090', .45)}" opacity=".7"/>` + hdLn('M66 46 Q82 42 82 58 Q81 70 72 72.6 Q67.6 62 66 46Z', .5, '#8a4a3e', .4) + hdLn('M70 50 Q74 54 72 60 M76 54 Q78 60 75 66', .5, '#8a4a3e', .45);
+  if (has('freckles')) s += [[46.5, 62], [49.5, 64.2], [52.6, 62.2], [67.4, 62.2], [70.5, 64.2], [73.5, 62], [57, 60.4], [63, 60.4], [44.6, 65.6], [75.4, 65.6]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".72" fill="#8a4a2a" opacity=".55"/>`).join('');
+  if (L.age === 'prime') s += hdLn(`M54 ${nt - .6} Q51.6 ${my - 3} 52.6 ${my} M66 ${nt - .6} Q68.4 ${my - 3} 67.4 ${my}`, .6, HD_INK, .22);
+  if (L.age === 'older') s += hdLn(`M50 38.6 Q60 36.6 70 38.6 M52 41.8 Q60 40.2 68 41.8 M43.4 54 l-2.6 -1.2 M43.4 56.4 l-2.8 .4 M76.6 54 l2.6 -1.2 M76.6 56.4 l2.8 .4 M54 ${nt - .6} Q51 ${my - 3} 52.4 ${my + .6} M66 ${nt - .6} Q69 ${my - 3} 67.6 ${my + .6}`, .65, HD_INK, .34);
+  if (L.eyes === 'deep') s += `<ellipse cx="50.5" cy="52.6" rx="6.4" ry="2.8" fill="#3a1d0e" opacity=".17"/><ellipse cx="69.5" cy="52.6" rx="6.4" ry="2.8" fill="#3a1d0e" opacity=".17"/>`;
+  if (has('tired')) s += hdLn('M46 60.4 Q50.5 62.6 55 60.4 M65 60.4 Q69.5 62.6 74 60.4', 1.6, '#5a3a4a', .3);
+  s += '</g>';
+  if (has('cheek')) s += hdLn('M71.6 60.6 L77 70.4', 1.2, '#a5534a') + hdLn('M72.4 64 l2.2 -1.2 M73.8 66.8 l2.2 -1.2', .6, '#a5534a');
+  if (has('mole')) s += `<circle cx="72.8" cy="${my - 3.4}" r="1" fill="${HD_INK}"/>`;
+  // 胡子在嘴前面画，脸颊上的红晕、眼睛、眉毛、鼻子、嘴
+  s += beard.under;
+  if ((expr === 'smile' || expr === 'smirk') && !['full', 'forked', 'short'].includes(L.beard)) s += `<ellipse cx="47.6" cy="${my - 7.6}" rx="3.8" ry="2" fill="#e8706a" opacity=".2"/><ellipse cx="72.4" cy="${my - 7.6}" rx="3.8" ry="2" fill="#e8706a" opacity=".2"/>`;
+  s += hdEye(F.ex[0], F, expr, -1, U);
+  if (!has('patch')) s += hdEye(F.ex[1], F, expr, 1, U);
+  s += hdBrow(F.ex[0], F, expr, -1) + hdBrow(F.ex[1], F, expr, 1);
+  s += pcNose(L.nose, nt);
+  s += hdMouth(F, expr);
+  s += beard.over;
+  if (expr === 'fear') s += `<path d="M79 41 Q77.4 44.4 79 45.6 Q80.6 44.4 79 41Z" fill="#cfe4f2" stroke="${HD_INK}" stroke-width=".5"/>`;
+  if (has('scar')) s += `<path d="M45.2 43.2 L50.6 52" stroke="${skin}" stroke-width="1.9" stroke-linecap="round"/><path d="M45.2 43.2 L50.6 52" stroke="#a5534a" stroke-width=".95" stroke-linecap="round"/>`;
+  // 头发前面、年纪大的白发、头饰前面、眼罩
+  if (!hideHair) { s += hair.f || ''; if (L.age === 'older' && !hair.shave && L.hairColor !== '#dcd8d0') s += hdLn('M46 31 Q51 27.4 56 26.6 M65 27 Q71 28.6 74.6 33', .9, '#dcd8d0', .75); }
+  else if (head.hide === 'front' && hair.f) s += hair.f;
+  s += head.front || '';
+  if (has('patch')) s += `<ellipse cx="69.5" cy="56.2" rx="6.2" ry="5.4" fill="#141210" stroke="${HD_INK}" stroke-width=".6"/>` + hdLn('M37 49 L64 54.6 M75.4 53.4 L84 46', 1.4, '#141210');
+  s += '</g>';
+  if (opts.bg !== false) s += `<circle cx="60" cy="60" r="58.8" fill="none" stroke="#c9a24a" stroke-width="1.6"/><circle cx="60" cy="60" r="56.8" fill="none" stroke="#000" stroke-opacity=".3" stroke-width=".9"/>`;
+  if (opts.dead) s += `<circle cx="60" cy="60" r="59" fill="#1a1a1a" opacity=".42"/>`;
+  return s + '</svg>';
+}
+
+// 接到头像函数上：主角（和建角色时的草稿）用这一套
+const _avatarSVGpc = avatarSVG;
+avatarSVG = function (look, opts = {}) {
+  if (look && (look.pc || pcIsPlayer(look))) return pcSVG(pcNorm(look), opts);
+  return _avatarSVGpc(look, opts);
+};
+
+// ----- 建角色：容貌一栏换成分页的部件表 -----
+let pcTab = 'face';
+const PC_TABS = [['face', '脸'], ['eyes', '眼眉'], ['nose', '鼻嘴'], ['hair', '头发'], ['beard', '胡须'], ['head', '头饰'], ['outfit', '衣着'], ['marks', '印记饰物']];
+function pcRandomLook(L, g) {
+  const pk = a => pick(a)[0];
+  Object.assign(L, {pc:1, face:pk(PCF.face), eyes:pk(PCF.eyes), brow:pk(PCF.brow), nose:pk(PCF.nose), mouth:pk(PCF.mouth), age:pick(['young', 'young', 'prime', 'prime', 'older']),
+    hair:pk(PCF.hair), hairColor:pick(PC_HAIRC), skin:pick(PC_SKINS), eye:pick(PC_EYEC), outfit:pk(PCF.outfit), outfitColor:pick(PC_OUTC), build:pick(['slim', 'avg', 'broad']), bg:'auto',
+    beard:g === '女' ? 'none' : pick(['none', 'none', ...PCF.beard.map(b => b[0])]), head:Math.random() < .55 ? 'none' : pk(PCF.head)});
+  const pool = [...PCF.marks, ...PCF.gear].map(m => m[0]), n = Math.floor(Math.random() * 3), acc = [];
+  for (let i = 0; i < n; i++) { const m = pick(pool); if (!acc.includes(m)) acc.push(m); }
+  if (g === '女' && Math.random() < .5 && !acc.includes('lashes')) acc.push('lashes');
+  L.acc = acc;
+}
+function pcCreatorCard() {
+  const L = pcNorm(draft.look), arms = draft.arms;
+  const grid = (key, vb, over, crop) => `<div class="fopts">${PCF[key].map(([k, n]) => `<button class="fopt ${L[key] === k ? 'on' : ''}" data-set="look.${key}" data-v="${k}" title="${n}">${pcSVG(Object.assign({}, L, over || {}, {[key]:k}), {vb, arms, bg:crop ? false : undefined})}<span>${n}</span></button>`).join('')}</div>`;
+  const sws = (key, list) => `<div class="opts">${list.map(c => `<button class="sw ${L[key] === c ? 'on' : ''}" data-set="look.${key}" data-v="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>`;
+  const tog = list => `<div class="opts">${list.map(([k, n]) => `<button class="opt ${L.acc.includes(k) ? 'on' : ''}" data-acc="${k}">${n}</button>`).join('')}</div>`;
+  const fld = (lbl, html) => `<div class="field"><span class="lbl">${lbl}</span>${html}</div>`;
+  const covered = ['coif', 'bascinet', 'hood', 'kerchief', 'kruseler'].includes(L.head);
+  const bgs = `<div class="opts">${Object.entries(PC_BG).map(([k, g]) => `<button class="sw ${L.bg === k ? 'on' : ''}" data-set="look.bg" data-v="${k}" title="${k === 'auto' ? '跟纹章的底色' : ''}" style="background:${g ? `radial-gradient(circle at 40% 30%, ${g[0]}, ${g[1]})` : 'conic-gradient(#8a3026, #3a5a8a, #3e6a3a, #946020, #8a3026)'}"></button>`).join('')}</div>`;
+  const body = {
+    face:fld('脸型', grid('face', '18 14 84 84', null, 1)) + fld('肤色', sws('skin', PC_SKINS)) + fld('年纪', grid('age', '18 14 84 84', null, 1)),
+    eyes:fld('眼型', grid('eyes', '34 40 52 30', null, 1)) + fld('眼睛的颜色', sws('eye', PC_EYEC)) + fld('眉形', grid('brow', '34 38 52 30', null, 1)),
+    nose:fld('鼻子', grid('nose', '42 46 36 36', null, 1)) + fld('嘴', grid('mouth', '40 58 40 30', null, 1)),
+    hair:fld('发式', grid('hair', '6 4 108 108', {head:'none'})) + fld('发色', sws('hairColor', PC_HAIRC)) + (covered ? '<p class="dim" style="margin:0;font-size:12.5px">你戴着的头饰会盖住大部分头发。</p>' : ''),
+    beard:fld('胡须', grid('beard', '18 34 84 84', null, 1)),
+    head:fld('头饰', grid('head', '4 0 112 112')),
+    outfit:fld('衣甲', grid('outfit', '0 18 120 102')) + fld('颜色', sws('outfitColor', PC_OUTC))
+      + fld('身形', `<div class="opts">${[['slim', '清瘦'], ['avg', '匀称'], ['broad', '魁梧']].map(([k, n]) => `<button class="opt ${L.build === k ? 'on' : ''}" data-set="look.build" data-v="${k}">${n}</button>`).join('')}</div>`)
+      + fld('底色', bgs) + (L.outfit === 'mail' ? '<p class="dim" style="margin:0;font-size:12.5px">锁甲罩袍胸前画着你纹章上的图案。</p>' : ''),
+    marks:fld('印记', tog(PCF.marks)) + fld('随身的东西', tog(PCF.gear)),
+  }[pcTab];
+  return `<div class="spread"><div class="sec" style="margin:0"><h3>容貌</h3><span class="lat">Facies</span></div><button class="btn small ghost" data-frand="1">随机容貌</button></div>
+    <div class="ftabs" role="tablist">${PC_TABS.map(([k, n]) => `<button class="ftab ${pcTab === k ? 'on' : ''}" data-ftab="${k}" role="tab" aria-selected="${pcTab === k}">${n}</button>`).join('')}</div>
+    <div class="stack" style="gap:12px">${body}</div>`;
+}
+const _newDraftPc = newDraft;
+newDraft = function () { const d = _newDraftPc(); pcNorm(d.look); return d; };
+const _randomizeDraftPc = randomizeDraft;
+randomizeDraft = function () { _randomizeDraftPc(); pcRandomLook(draft.look, draft.g); };
+const _renderCreatorPc = renderCreator;
+renderCreator = function () {
+  _renderCreatorPc();
+  const card = [...document.querySelectorAll('#app .card')].find(c => { const l = c.querySelector('.sec .lat'); return l && l.textContent === 'Facies'; });
+  if (!card) return;
+  card.innerHTML = pcCreatorCard();
+  card.addEventListener('click', e => {
+    const t = e.target.closest('[data-ftab],[data-frand]');
+    if (!t) return;
+    if (t.dataset.ftab) pcTab = t.dataset.ftab; else pcRandomLook(draft.look, draft.g);
+    renderCreator();
+  });
+};
+const _updatePreviewPc = updatePreview;
+updatePreview = function () {
+  _updatePreviewPc();
+  const row = document.querySelector('#c-prev .prev-row');
+  if (row && draft) row.insertAdjacentHTML('afterend', `<div class="pc-exprs" aria-label="表情">${['smile', 'smirk', 'stern', 'angry', 'sad', 'fear'].map(e => `<div title="${e}">${avatarSVG(draft.look, {expr:e})}</div>`).join('')}</div>`);
+};
+
+(() => {
+  const st = document.createElement('style');
+  st.textContent = `
+.ftabs{display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid var(--line); padding-bottom:8px}
+.ftab{cursor:pointer; border:1px solid transparent; background:transparent; color:var(--ash); padding:4px 11px; border-radius:var(--r); font-size:13.5px; letter-spacing:.06em}
+.ftab:hover{color:var(--snow)}
+.ftab.on{border-color:var(--flame-dim); color:var(--flame); background:var(--flame-bg)}
+.fopts{display:grid; grid-template-columns:repeat(auto-fill, minmax(74px, 1fr)); gap:6px}
+.fopt{cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 2px 5px; border:1px solid var(--line2); background:var(--stone2); border-radius:var(--r); color:var(--ash); font-size:12px; letter-spacing:.04em}
+.fopt svg{width:60px; height:60px; display:block}
+.fopt:hover{border-color:var(--flame-dim); color:var(--snow)}
+.fopt.on{border-color:var(--flame); color:var(--flame); background:var(--flame-bg)}
+.prev-ava{width:170px; height:170px}
+.pc-exprs{display:grid; grid-template-columns:repeat(6, 1fr); gap:5px; width:100%; max-width:280px; margin:0 auto}
+.pc-exprs > div{aspect-ratio:1}
+.pc-exprs svg{width:100%; height:100%; display:block}
+@media (max-width:480px){ .fopts{grid-template-columns:repeat(auto-fill, minmax(64px, 1fr))} .fopt svg{width:52px; height:52px} .prev-ava{width:140px; height:140px} }`;
+  const last = [...document.querySelectorAll('style')].pop();
+  if (last) last.after(st); else document.head.appendChild(st);
+})();
 // ===== 工具 =====
 const $ = s => document.querySelector(s);
 const pick = a => a[Math.floor(Math.random() * a.length)];

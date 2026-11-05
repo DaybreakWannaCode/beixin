@@ -11351,6 +11351,45 @@ const NPC_FACE = {
   pavel:{face:'gaunt', eyes:'deep', brow:'thin', nose:'straight', mouth:'thin', age:'older', acc:['tired']},
 };
 for (const [id, f] of Object.entries(NPC_FACE)) if (NPCS[id] && NPCS[id].look) Object.assign(NPCS[id].look, f);
+// ===== 一个字的补丁：ZCOOL XiaoWei 的“回”画成了一个实心方块 =====
+// 标题一类用这个字体的地方，遇到“回”就换成宋体的那一个。每次画完界面以后扫一遍，只扫用这个字体的元素。
+const HUI_SEL = 'h1,h2,h3,h4,.bgc b,.when b,.verdict';
+function huiFix(root) {
+  if (!root || !root.querySelectorAll) return;
+  for (const el of root.querySelectorAll(HUI_SEL)) {
+    if (!el.textContent.includes('回')) continue;
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), ts = [];
+    while (w.nextNode()) ts.push(w.currentNode);
+    for (const t of ts) {
+      if (!t.nodeValue.includes('回') || (t.parentElement && t.parentElement.classList.contains('hui'))) continue;
+      const frag = document.createDocumentFragment();
+      t.nodeValue.split('回').forEach((part, i) => {
+        if (i) { const s = document.createElement('span'); s.className = 'hui'; s.textContent = '回'; frag.appendChild(s); }
+        if (part) frag.appendChild(document.createTextNode(part));
+      });
+      t.replaceWith(frag);
+    }
+  }
+}
+const huiApp = () => huiFix(document.getElementById('app')), huiModal = () => huiFix(document.getElementById('modal-root'));
+const _modalHui = modal;
+modal = function () { _modalHui.apply(this, arguments); huiModal(); };
+const _renderGameHui = renderGame;
+renderGame = function () { _renderGameHui(); huiApp(); };
+const _renderEndingHui = renderEnding;
+renderEnding = function () { _renderEndingHui(); huiApp(); };
+const _renderTitleHui = renderTitle;
+renderTitle = function () { _renderTitleHui(); huiApp(); };
+const _renderPrologueHui = renderPrologue;
+renderPrologue = function (i, next) { _renderPrologueHui(i, next); huiApp(); };
+const _renderCreatorHui = renderCreator;
+renderCreator = function () { _renderCreatorHui(); huiApp(); };
+(() => {
+  const st = document.createElement('style');
+  st.textContent = '.hui{font-family:"Noto Serif SC","Songti SC","STSong","SimSun",serif}';
+  const last = [...document.querySelectorAll('style')].pop();
+  if (last) last.after(st); else document.head.appendChild(st);
+})();
 // ===== 启动 =====
 try { window.claude?.hot?.snapshot?.(() => ({S})); } catch (e) {}
 if (window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(window.claude?.hot?.data ?? {});

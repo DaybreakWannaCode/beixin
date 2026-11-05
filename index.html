@@ -1530,10 +1530,14 @@ function pcHead(k, oc, u, P) {
         front:hdFp('M31 66 Q28 22 60 19 Q92 22 89 66 Q86 36 60 31 Q34 36 31 66Z', hc) + hdLn('M37 48 Q42 34 60 30.6 Q78 34 83 48', .7, pcMix(hc, '#000000', .35), .7)};
     }
     case 'chaperon': {
-      const hc = pcMix(oc, '#000000', .1), dk = pcMix(oc, '#000000', .4);
-      return {hide:false, ears:true, back:hdFp('M78 40 Q92 54 90 80 Q86 84 83 78 Q85 60 76 46Z', hc),
-        front:hdFp('M40 32 Q42 14 60 13 Q80 14 82 32 Q60 26 40 32Z', hc) + hdFp('M33.6 41 Q33 25 60 23 Q87 25 86.4 41 Q86.4 47 80 46.6 Q60 40.6 40 46.6 Q33.6 47 33.6 41Z', hc)
-          + hdLn('M38 31 L42 44 M45 27 L49 42 M53 25 L56 41 M61 24.6 L63 41 M69 25 L70.6 41.6 M76 27 L77.6 43 M82 31 L83 44', .7, dk, .75)};
+      // 缠头帽：一圈拧着的厚布卷，比头宽；布冠从卷里鼓出来，歪向一边；一侧垂下布尾
+      const hc = pcMix(oc, '#000000', .08), dk = pcMix(oc, '#000000', .45), hi = pcMix(oc, '#ffffff', .25);
+      return {hide:false, ears:true, back:hdFp('M80 44 Q94 58 92 84 Q88 88 85 82 Q87 64 77 50Z', hc) + hdLn('M84 54 Q89 66 88 80', .6, dk, .7),
+        front:hdFp('M44 33 Q30 22 40 12.6 Q52 4.6 66 9 Q78 13.4 76 22 Q72 17 64 17.6 Q54 19 54 31Z', hc) + hdLn('M42 24 Q40 16 48 11.6 M50 27 Q50 18 58 14', .7, dk, .8) + hdLn('M46 14 Q54 9.4 63 10', 1.1, hi, .6)
+          + hdFp('M29.6 41 Q29 28.6 60 27 Q91 28.6 90.4 41 Q91.6 51 81 50.4 Q60 44.4 39 50.4 Q28.4 51 29.6 41Z', hc)
+          + hdLn('M31 37 Q36 33.6 41 36 Q45 39 49 36.6 Q53 34 57 36.8 Q61 39.6 65 37 Q69 34.4 73 37.4 Q77 40 81 37.8 Q85 35.6 89 38.4', .9, dk, .75)
+          + hdLn('M31.4 44.6 Q35.6 41.4 40 43.6 Q44.6 46.4 49 44 Q53.4 41.6 57.6 44 Q62 46.4 66.4 44 Q70.6 41.8 75 44.2 Q79.4 46.4 84 43.8 Q87 42.4 89.6 44.6', .8, dk, .65)
+          + hdLn('M36 31.4 Q47 28.4 58 28.2', 1.3, hi, .6)};
     }
     case 'felt': return {hide:false, ears:true, back:'',
       front:hdSh('M40 40 Q60 35 80 40 L80 45 Q60 41 40 45Z', .16, '#000') + hdFp('M42 37 Q41 15 60 14 Q79 15 78 37Z', '#6a4a2e') + hdLn('M42.6 32 Q60 28.6 77.4 32', 2.4, '#3a2618')
@@ -1545,6 +1549,10 @@ function pcHead(k, oc, u, P) {
       back:hdFp('M27 102 Q21 56 31 36 Q41 17 60 16.4 Q79 17 89 36 Q99 56 93 102 Q78 93 60 93 Q42 93 27 102Z', PC_LINEN) + hdSh('M80 30 Q96 50 93 102 Q86 97 82 95 Q88 60 80 30Z', .12, '#5a4a30'),
       body:hdFp(`M43 66 Q46 ${c + 4} 60 ${c + 6} Q74 ${c + 4} 77 66 L80 96 Q60 104 40 96Z`, PC_LINEN, .9) + hdLn('M46 90 Q60 96 74 90', .6, '#a8a090', .8),
       front:hdRuffle(60, 52, 30.4, 3.4, 166, 374, 17) + hdRuffle(60, 52, 27, 3.4, 166, 374, 15) + hdRuffle(60, 52, 23.6, 3.4, 168, 372, 13)};
+    case 'crown': return {hide:false, ears:true, back:'',
+      front:hdFp('M36.6 42.6 Q60 35 83.4 42.6 L84 35.4 L78.6 38.6 L76 29.4 L70.6 36.4 L66 26.6 L60 34.6 L54 26.6 L49.4 36.4 L44 29.4 L41.4 38.6 L36 35.4Z', '#d8a838', .9)
+        + hdLn('M37.4 40.6 Q60 33.6 82.6 40.6', 1, '#8a6418', .8) + [[44, 29.4], [54, 26.6], [66, 26.6], [76, 29.4]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.4" fill="#f0e0a8" stroke="${HD_INK}" stroke-width=".4"/>`).join('')
+        + `<circle cx="60" cy="38.4" r="1.9" fill="#b3262a" stroke="${HD_INK}" stroke-width=".5"/><circle cx="49" cy="39.6" r="1.4" fill="#2a5aa8"/><circle cx="71" cy="39.6" r="1.4" fill="#2a8a5a"/>`};
     case 'circlet': return {hide:false, ears:true, back:'', front:hdLn('M38.6 41 Q60 33 81.4 41', 2.4, '#d6a84a') + `<circle cx="60" cy="36.6" r="2.3" fill="#b02a1e" stroke="#d6a84a" stroke-width=".8"/>`};
     case 'wreath': return {hide:false, ears:true, back:'', front:hdWreath(60, 37, 21.5, 13, 188, 352, 13)};
   }
@@ -1594,6 +1602,13 @@ function pcOutfit(k, oc, w, nw, u, arms) {
     case 'tunic': return {body:hdFp(body, oc, 1.1) + shade + hdLn(`M${L(w * 1.1)} 98 Q${L(w)} 110 ${L(w * 1.06)} 124 M${R(w * 1.1)} 98 Q${R(w)} 110 ${R(w * 1.06)} 124`, .6, dk, .7),
       collar:hdFp('M53 86 L60 100 L67 86Z', 'var(--pcskin)', .8) + hdLn('M55.4 89 L64.6 91 M56.6 92.4 L63.4 94.4 M57.8 95.8 L62.2 97.4', .7, '#5a3a20') + hdLn('M51 85.4 Q60 89 69 85.4', 1.6, dk)};
   }
+  if (k === 'shawl' || k === 'apron') {
+    const base = hdFp(body, oc, 1.1) + shade + hdFp('M53 86 L60 98 L67 86Z', 'var(--pcskin)', .8);
+    if (k === 'apron') return {body:base + hdFp('M50 96 L70 96 L72.6 124 L47.4 124Z', PC_LINEN, .9) + hdLn('M50 96 L46 88 M70 96 L74 88', 1, '#a8a090'), collar:''};
+    const sc = pcMix(oc, '#8a6a3a', .5);
+    return {body:base + hdFp(`M${L(w * 1.5)} 104 Q${L(w)} 90 60 92 Q${R(w)} 90 ${R(w * 1.5)} 104 Q${R(w * .6)} 113 60 119 Q${L(w * .6)} 113 ${L(w * 1.5)} 104Z`, sc, .9)
+      + hdLn(`M${L(w * 1.4)} 106 l-.6 3 M${L(w * 1.1)} 109 l-.4 3 M${L(w * .8)} 112 l-.2 3 M${R(w * .8)} 112 l.2 3 M${R(w * 1.1)} 109 l.4 3 M${R(w * 1.4)} 106 l.6 3`, .8, pcMix(sc, '#000000', .3), .8), collar:''};
+  }
   // 棉甲
   return {body:clip + hdFp(body, oc, 1.1) + `<g clip-path="url(#po${u})">${hdLn([-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6].map(i => `M${60 + i * 7} 86 Q${61.5 + i * 7} 104 ${60 + i * 7} 124`).join(' '), .7, dk, .8)}</g>` + shade,
     collar:hdFp('M46 85 Q60 94 74 85 L76 91 Q60 100 44 91Z', dk, .9)};
@@ -1620,7 +1635,7 @@ function pcNorm(L) {
   for (const [a, h] of Object.entries(moved)) { const i = acc.indexOf(a); if (i >= 0) { acc.splice(i, 1); if (L.head === 'none') L.head = h; } }
   if (L.age === 'old') L.age = 'older'; else if (L.age === 'child') L.age = 'young';
   if (!PCF.hair.some(([k]) => k === L.hair)) L.hair = 'crop';
-  if (!PCF.outfit.some(([k]) => k === L.outfit)) L.outfit = 'gambeson';
+  if (!PCF.outfit.some(([k]) => k === L.outfit) && !['shawl', 'apron'].includes(L.outfit)) L.outfit = 'gambeson';
   L.pc = 1;
   return L;
 }
@@ -1630,8 +1645,8 @@ const pcArmsOf = L => (typeof S !== 'undefined' && S && S.p && S.p.look === L &&
 const pcCache = new Map();
 function pcSVG(L, opts = {}) {
   const arms = opts.arms || pcArmsOf(L);
-  const expr = opts.expr || 'calm', acc = L.acc || [];
-  const key = JSON.stringify([L.skin, L.hair, L.hairColor, L.eye, L.beard, L.outfit, L.outfitColor, L.build, acc, L.face, L.eyes, L.brow, L.nose, L.mouth, L.age, L.head, L.bg, arms && [arms.f1, arms.ch, arms.cc], expr, opts.vb, opts.bg, !!opts.dead]);
+  const expr = opts.expr || L.expr || 'calm', acc = L.acc || [];
+  const key = JSON.stringify([L.skin, L.hair, L.hairColor, L.eye, L.beard, L.outfit, L.outfitColor, L.build, acc, L.face, L.eyes, L.brow, L.nose, L.mouth, L.age, L.head, L.headColor, L.bg, L.child, arms && [arms.f1, arms.ch, arms.cc], expr, opts.vb, opts.bg, !!opts.dead]);
   let tpl = pcCache.get(key);
   if (!tpl) { if (pcCache.size > 400) pcCache.clear(); tpl = pcBuild(L, expr, opts, arms, acc); pcCache.set(key, tpl); }
   const u = 'p' + (++hdUid);
@@ -1647,16 +1662,18 @@ function pcBuild(L, expr, opts, arms, acc) {
   const F = {ex:[50.5, 69.5], ey:56, ew:E.ew, eh:E.eh, tilt:E.tilt || 0, iris:L.eye || '#4a2a1a', lash:has('lashes'),
     bc:L.hairColor === '#dcd8d0' || L.hairColor === '#9a958d' ? pcMix(hc, '#000000', .25) : pcMix(hc, '#000000', .3), bw:B.bw, by:B.bw < 1.6 ? 47.4 : 48, arch:B.arch, btilt:B.btilt || 0,
     mx:60, my, mw:M.mw, lip:dark ? '#6a3028' : '#9a4a40', lipFill:M.fill ? (dark ? '#8a4a40' : '#b8625a') : null, smile:L.mouth === 'wide' ? 'grin' : 'soft', skin};
-  const hair = pcHair(L.hair, hc, U), head = pcHead(L.head || 'none', oc, U, {c}), out = pcOutfit(L.outfit, oc, w, nw, U, arms);
+  const hair = pcHair(L.hair, hc, U), head = pcHead(L.head || 'none', L.headColor || oc, U, {c}), out = pcOutfit(L.outfit, oc, w, nw, U, arms);
   const beard = pcBeard(L.beard, {c, my, d:FC.d}, hc, U);
   const hideHair = head.hide === true, earsOn = head.ears !== false && hair.ears !== false;
-  const bgKey = L.bg && L.bg !== 'auto' ? L.bg : (arms && PC_TINCT_BG[arms.f1]) || 'slate', bg = PC_BG[bgKey] || PC_BG.slate;
+  const bgKey = L.bg && L.bg !== 'auto' ? L.bg : (arms && PC_TINCT_BG[arms.f1]) || 'slate';
+  const bg = bgKey === 'tone' ? [pcMix(pcMix(oc, '#4a3e30', .55), '#000000', .08), '#0f0d0b'] : PC_BG[bgKey] || PC_BG.slate;
   let s = `<svg viewBox="${opts.vb || '0 0 120 120'}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><clipPath id="hc${U}"><circle cx="60" cy="60" r="60"/></clipPath>`
     + `<clipPath id="fc${U}"><path d="${FC.d}"/></clipPath>`
     + `<radialGradient id="hg${U}" cx="40%" cy="30%" r="85%"><stop offset="0" stop-color="${bg[0]}"/><stop offset="1" stop-color="${bg[1]}"/></radialGradient>`
     + `<linearGradient id="ps${U}" x1="0" y1="0" x2="1" y2=".3"><stop offset="0" stop-color="${PC_STEEL[0]}"/><stop offset=".55" stop-color="#9aa0a8"/><stop offset="1" stop-color="${PC_STEEL[1]}"/></linearGradient>`
     + `<pattern id="pm${U}" width="3.2" height="3" patternUnits="userSpaceOnUse"><circle cx="1.6" cy="1.5" r="1.1" fill="none" stroke="#3b4048" stroke-width=".6"/></pattern></defs><g clip-path="url(#hc${U})">`;
   if (opts.bg !== false) s += `<circle cx="60" cy="60" r="60" fill="url(#hg${U})"/><circle cx="60" cy="48" r="34" fill="#fff" opacity=".05"/>`;
+  s += L.child ? '<g transform="translate(9 16) scale(.85)">' : '<g>';
   // 后面：帽子的后摆、头发
   s += head.back || '';
   if (!hideHair) s += hair.b || '';
@@ -1701,7 +1718,7 @@ function pcBuild(L, expr, opts, arms, acc) {
   else if (head.hide === 'front' && hair.f) s += hair.f;
   s += head.front || '';
   if (has('patch')) s += `<ellipse cx="69.5" cy="56.2" rx="6.2" ry="5.4" fill="#141210" stroke="${HD_INK}" stroke-width=".6"/>` + hdLn('M37 49 L64 54.6 M75.4 53.4 L84 46', 1.4, '#141210');
-  s += '</g>';
+  s += '</g></g>';
   if (opts.bg !== false) s += `<circle cx="60" cy="60" r="58.8" fill="none" stroke="#c9a24a" stroke-width="1.6"/><circle cx="60" cy="60" r="56.8" fill="none" stroke="#000" stroke-opacity=".3" stroke-width=".9"/>`;
   if (opts.dead) s += `<circle cx="60" cy="60" r="59" fill="#1a1a1a" opacity=".42"/>`;
   return s + '</svg>';
@@ -1711,8 +1728,22 @@ function pcBuild(L, expr, opts, arms, acc) {
 const _avatarSVGpc = avatarSVG;
 avatarSVG = function (look, opts = {}) {
   if (look && (look.pc || pcIsPlayer(look))) return pcSVG(pcNorm(look), opts);
+  if (look && !(look.hd && HD[look.hd])) return pcSVG(pcNpc(look), opts);
   return _avatarSVGpc(look, opts);
 };
+// 别的人：拷一份换成新画法的样子，不动原来的；小孩脸圆、眼睛大；底色跟衣服的颜色走
+const pcNpcCache = new WeakMap();
+function pcNpc(look) {
+  let L = pcNpcCache.get(look);
+  if (L) return L;
+  L = Object.assign({}, look, {acc:[...(look.acc || [])]});
+  const child = look.age === 'child';
+  pcNorm(L);
+  if (child) Object.assign(L, {child:1, face:'round', eyes:'round', beard:'none', nose:'small', mouth:'small'});
+  if (!look.bg) L.bg = 'tone';
+  pcNpcCache.set(look, L);
+  return L;
+}
 
 // ----- 建角色：容貌一栏换成分页的部件表 -----
 let pcTab = 'face';
@@ -10874,6 +10905,43 @@ toast = function (msg) {
   const last = [...document.querySelectorAll('style')].pop();
   if (last) last.after(st); else document.head.appendChild(st);
 })();
+// ===== 有名有姓的人：按他们的为人把脸捏好 =====
+// 用主角捏脸的那套部件（pcface.js），这里只写和默认不一样的地方。放在所有人物都定义好以后。
+const NPC_FACE = {
+  // 母亲：守寡，温和，头上蒙着麻布巾
+  anna:{face:'oval', eyes:'down', brow:'thin', nose:'straight', mouth:'small', age:'older', head:'kerchief', outfit:'gown', acc:['rosary']},
+  // 妹妹：十九岁，跟着塔博尔的人走了
+  olenka:{face:'heart', eyes:'round', brow:'thin', nose:'small', mouth:'small', age:'young', outfit:'tunic', outfitColor:'#d4cfc4', acc:['freckles', 'lashes', 'chalice']},
+  // 扬神父：老了，胆子大了
+  jan:{face:'round', eyes:'down', brow:'thick', nose:'broad', mouth:'mid', age:'older', acc:['cross']},
+  // 博胡斯拉夫：铁领主，贪心，嗓门大
+  bohus:{face:'square', eyes:'narrow', brow:'thick', nose:'broken', mouth:'wide', age:'prime', acc:['scar', 'cheek', 'ruddy']},
+  // 杰士卡：六十岁上下，一只眼睛，光头，两撇垂下来的长胡子
+  zizka:{face:'square', eyes:'deep', brow:'thick', nose:'hook', mouth:'thin', age:'older', beard:'droop', outfit:'brig', outfitColor:'#3a3328', acc:['patch', 'scar']},
+  // 热利夫斯基：瘦，眼窝深，布道的时候眼睛发亮
+  zeliv:{face:'gaunt', eyes:'deep', brow:'sword', nose:'hook', mouth:'thin', age:'prime', acc:['chalice']},
+  // 磨坊主：绿眼睛的老人，衣角总是湿的
+  miller:{face:'long', eyes:'round', brow:'thin', nose:'broad', mouth:'wide', age:'older', outfit:'tunic', acc:['tired']},
+  // 玫瑰堡的监护人：老练、温和，戴着时兴的缠头帽
+  warden:{face:'oval', eyes:'almond', brow:'arch', nose:'straight', mouth:'small', age:'older', head:'chaperon', outfit:'gown', acc:['chain']},
+  // 西吉斯蒙德：英俊，风趣，记仇；分叉的胡子，戴着王冠
+  sigis:{face:'long', eyes:'almond', brow:'arch', nose:'straight', mouth:'mid', age:'prime', head:'crown', acc:['chain']},
+  // 韦伯矿长：德意志人，只关心银子
+  vogt:{face:'square', eyes:'narrow', brow:'flat', nose:'broad', mouth:'thin', age:'prime', head:'chaperon', headColor:'#1b1a1a', acc:['chain']},
+  // 老贝特卡：科齐堡下的牧羊人
+  betka:{face:'round', eyes:'down', brow:'thin', nose:'broad', mouth:'small', age:'older', head:'kerchief', outfit:'shawl', acc:['ruddy']},
+  // 渡工：风吹日晒，鼻子断过
+  vavrin:{face:'square', eyes:'narrow', brow:'thick', nose:'broken', mouth:'wide', age:'older', head:'felt', outfit:'tunic', acc:['ruddy']},
+  // 胡贝特修士：医院骑士团的老骑士，打过尼科波利斯
+  hubert:{face:'long', eyes:'deep', brow:'thick', nose:'hook', mouth:'thin', age:'older', acc:['cross', 'scar']},
+  // 卢卡什修士：年轻的照护修士
+  lukas:{face:'oval', eyes:'round', brow:'arch', nose:'small', mouth:'mid', age:'young', acc:['cross']},
+  // 海因里希修士：多明我会的审讯官，白袍黑兜帽
+  heinrich:{face:'long', eyes:'narrow', brow:'flat', nose:'hook', mouth:'thin', age:'prime', head:'hood', headColor:'#1b1a1a', acc:['cross']},
+  // 帕夫尔修士：塞德莱茨看骨头的人
+  pavel:{face:'gaunt', eyes:'deep', brow:'thin', nose:'straight', mouth:'thin', age:'older', acc:['tired']},
+};
+for (const [id, f] of Object.entries(NPC_FACE)) if (NPCS[id] && NPCS[id].look) Object.assign(NPCS[id].look, f);
 // ===== 启动 =====
 try { window.claude?.hot?.snapshot?.(() => ({S})); } catch (e) {}
 if (window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(window.claude?.hot?.data ?? {});
